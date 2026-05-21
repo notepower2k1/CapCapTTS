@@ -28,6 +28,7 @@ let GENERATION_START_TIME = null;
 let CURRENT_FILTER = 'all';
 let AUTOSAVE_TIMER = null;
 let CHUNK_PAGE = 0;
+let _expandedChunks = new Set();
 const CHUNK_PER_PAGE = 10;
 let CURRENT_VOICE_MODE = 'low';
 let CURRENT_VOICE_ID = 'banmai';
@@ -77,6 +78,8 @@ const autosaveIndicator = document.getElementById('autosaveIndicator');
 const autosaveText = document.getElementById('autosaveText');
 
 function showFinalAudio() {
+	const mp = document.getElementById('chunkPlayer');
+	if (mp) mp.remove();
 	finalAudioBar.classList.add('visible');
 	finalAudioOverlay.classList.add('visible');
 	reopenFinalBtn.classList.remove('visible');
@@ -89,7 +92,7 @@ function hideFinalAudio() {
 }
 
 // Slider fills
-['speedSlider', 'pitchSlider', 'volumeSlider'].forEach(id => {
+['speedSlider', 'volumeSlider'].forEach(id => {
 	const el = document.getElementById(id);
 	if (!el) return;
 	const valEl = document.getElementById(id.replace('Slider', 'Val'));
@@ -102,7 +105,7 @@ function hideFinalAudio() {
 	}
 	el.addEventListener('input', function () {
 		const v = this.value;
-		if (id === 'speedSlider' && valEl) valEl.textContent = parseFloat(v).toFixed(1) + '×';
+		if (id === 'speedSlider' && valEl) valEl.textContent = (Math.round(parseFloat(v) * 100) / 100).toFixed(2) + '×';
 		else if (id === 'volumeSlider' && valEl) valEl.textContent = v + ' dB';
 		else if (valEl) valEl.textContent = v;
 		updateSliderFill();
@@ -150,10 +153,9 @@ function _saveFileConfig(idx) {
 		normalize: document.getElementById('normalizeCheckbox').checked,
 		clean: document.getElementById('cleanCheckbox').checked,
 		normalize_audio: document.getElementById('normalizeAudioCheckbox').checked,
-		split_segments: document.getElementById('splitSegmentsCheckbox').checked,
-		split_mode: document.getElementById('splitSegmentsCheckbox').checked ? document.getElementById('splitModeSelect').value : 'default',
+		split_segments: true,
+		split_mode: document.getElementById('splitModeSelect').value,
 		speed: parseFloat(document.getElementById('speedSlider').value),
-		pitch: parseFloat(document.getElementById('pitchSlider').value),
 		volume: parseFloat(document.getElementById('volumeSlider').value),
 	};
 	f._configured = true;
@@ -189,7 +191,7 @@ function renderFileQueue() {
 		const segCount = f.chunks ? f.chunks.filter(c => c.status === 'done').length : 0;
 		const segTotal = f.chunks ? f.chunks.length : 0;
 		const cfg = f.config;
-		const cfgSummary = cfg ? `${cfg.voice_label || cfg.voice_id} ${cfg.split_segments ? cfg.split_mode : 'nosplit'}` : '';
+		const cfgSummary = cfg ? `${cfg.voice_label || cfg.voice_id} ${cfg.split_mode || 'default'}` : '';
 		return `<div class="file-queue-item" style="cursor:pointer;flex-wrap:wrap;${isSel ? 'border-color:var(--accent-primary);background:rgba(91,122,106,0.04);' : ''}" onclick="if(event.target.closest('button'))return;_fqSelected=_fqSelected===${fi}?null:${fi};_loadFileToEditor(${fi});renderFileQueue()">
               <span class="fq-name" title="${f.name}">${escapeHtml(f.name)}</span>
               <span style="font-size:11px;color:var(--text-muted);font-family:monospace;">
@@ -225,11 +227,8 @@ function _loadFileToEditor(idx) {
 		document.getElementById('normalizeCheckbox').checked = c.normalize || false;
 		document.getElementById('cleanCheckbox').checked = c.clean || false;
 		document.getElementById('normalizeAudioCheckbox').checked = c.normalize_audio !== false;
-		document.getElementById('splitSegmentsCheckbox').checked = c.split_segments || false;
-		document.getElementById('splitSegmentsCheckbox').dispatchEvent(new Event('change'));
 		if (c.split_mode) document.getElementById('splitModeSelect').value = c.split_mode;
 		if (c.speed !== undefined) { document.getElementById('speedSlider').value = c.speed; document.getElementById('speedSlider').dispatchEvent(new Event('input')); }
-		if (c.pitch !== undefined) { document.getElementById('pitchSlider').value = c.pitch; document.getElementById('pitchSlider').dispatchEvent(new Event('input')); }
 		if (c.volume !== undefined) { document.getElementById('volumeSlider').value = c.volume; document.getElementById('volumeSlider').dispatchEvent(new Event('input')); }
 	}
 	// Load results into main UI if file is done
@@ -305,10 +304,10 @@ async function processSingleFile(idx) {
 				clean: c.clean !== undefined ? c.clean : document.getElementById('cleanCheckbox').checked,
 				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox').checked,
 				speed: c.speed !== undefined ? c.speed : parseFloat(document.getElementById('speedSlider').value),
-				pitch: c.pitch !== undefined ? c.pitch : parseFloat(document.getElementById('pitchSlider').value),
 				volume: c.volume !== undefined ? c.volume : parseFloat(document.getElementById('volumeSlider').value),
-				split_segments: c.split_segments !== undefined ? c.split_segments : document.getElementById('splitSegmentsCheckbox').checked,
-				split_mode: c.split_mode || (document.getElementById('splitSegmentsCheckbox').checked ? document.getElementById('splitModeSelect').value : 'default'),
+				pitch: 0,
+				split_segments: true,
+				split_mode: c.split_mode || document.getElementById('splitModeSelect').value,
 				cfg_strength: parseFloat(document.getElementById('cfgSlider').value),
 				steps: parseInt(document.getElementById('stepsSlider').value),
 				sway: parseFloat(document.getElementById('swaySlider').value),
@@ -562,16 +561,8 @@ function updateVoiceLabel() {
 }
 
 function updateSplitCheckbox() {
-	const label = document.getElementById('splitSegmentsLabel');
-	const cb = document.getElementById('splitSegmentsCheckbox');
-	label.style.display = '';
-	cb.disabled = false;
-	document.getElementById('splitModeOptions').style.display = cb.checked ? '' : 'none';
+	document.getElementById('splitModeOptions').style.display = '';
 }
-
-document.getElementById('splitSegmentsCheckbox').addEventListener('change', function () {
-	document.getElementById('splitModeOptions').style.display = this.checked ? '' : 'none';
-});
 
 function updateModelConfig() {
 	const panel = document.getElementById('modelConfig');
@@ -616,12 +607,7 @@ function updateCharCount() {
 
 	if (wordCount) wordCount.textContent = `${words.toLocaleString()} words`;
 
-	const mode = document.querySelector('.toggle-btn.active').dataset.mode;
-	let rate = VOICE_RATES.preset;
-	if (CURRENT_VOICE_MODE === 'custom') {
-		rate = VOICE_RATES.custom[CURRENT_VOICE_ID] || 18;
-	}
-	let estSec = len > 0 ? len / rate : 0;
+	let estSec = len > 0 ? len / VOICE_RATES.preset : 0;
 	if (PAUSE_CFG.enabled) {
 		const p = PAUSE_CFG.pauses;
 		for (const ch of Object.keys(p)) {
@@ -645,8 +631,7 @@ function updateCharCount() {
 
 	if (estDuration) estDuration.textContent = `${durationStr} audio`;
 
-	const splitEnabled = document.getElementById('splitSegmentsCheckbox').checked;
-	const estSegCount = splitEnabled && len > 0 ? Math.ceil(len / 400) : 1;
+	const estSegCount = len > 0 ? Math.ceil(len / 400) : 1;
 	if (estSegments) estSegments.textContent = `${estSegCount} segment${estSegCount !== 1 ? 's' : ''}`;
 }
 
@@ -779,7 +764,8 @@ function getOrCreateMiniPlayer() {
 	if (old) return old;
 	const wrap = document.createElement('div');
 	wrap.id = 'chunkPlayer';
-	wrap.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;';
+	const hasProgress = progressFloat.classList.contains('visible');
+	wrap.style.cssText = `position:fixed;bottom:${hasProgress ? '100px' : '24px'};left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;`;
 	const aud = document.createElement('audio');
 	aud.controls = true;
 	aud.style.cssText = 'height:34px;width:280px;';
@@ -829,7 +815,7 @@ previewBtn.addEventListener('click', async () => {
 		const res = await fetch(`${API_BASE}/tts/preview`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ text, voice_mode: CURRENT_VOICE_MODE, voice_id: CURRENT_VOICE_ID, normalize, clean: document.getElementById('cleanCheckbox').checked, normalize_audio: document.getElementById('normalizeAudioCheckbox').checked, speed: parseFloat(document.getElementById('speedSlider').value), pitch: parseFloat(document.getElementById('pitchSlider').value), volume: parseFloat(document.getElementById('volumeSlider').value), cfg_strength: parseFloat(document.getElementById('cfgSlider').value), steps: parseInt(document.getElementById('stepsSlider').value), sway: parseFloat(document.getElementById('swaySlider').value), num_step: parseInt(document.getElementById('numStepSlider').value) }),
+			body: JSON.stringify({ text, voice_mode: CURRENT_VOICE_MODE, voice_id: CURRENT_VOICE_ID, normalize, clean: document.getElementById('cleanCheckbox').checked, normalize_audio: document.getElementById('normalizeAudioCheckbox').checked, speed: parseFloat(document.getElementById('speedSlider').value), pitch: 0, volume: parseFloat(document.getElementById('volumeSlider').value), cfg_strength: parseFloat(document.getElementById('cfgSlider').value), steps: parseInt(document.getElementById('stepsSlider').value), sway: parseFloat(document.getElementById('swaySlider').value), num_step: parseInt(document.getElementById('numStepSlider').value) }),
 		});
 		if (!res.ok) throw new Error('Preview failed');
 		const data = await res.json();
@@ -887,10 +873,10 @@ async function startGeneration() {
 				clean: c.clean !== undefined ? c.clean : document.getElementById('cleanCheckbox').checked,
 				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox').checked,
 				speed: c.speed !== undefined ? c.speed : parseFloat(document.getElementById('speedSlider').value),
-				pitch: c.pitch !== undefined ? c.pitch : parseFloat(document.getElementById('pitchSlider').value),
 				volume: c.volume !== undefined ? c.volume : parseFloat(document.getElementById('volumeSlider').value),
-				split_segments: c.split_segments !== undefined ? c.split_segments : document.getElementById('splitSegmentsCheckbox').checked,
-				split_mode: c.split_mode || (document.getElementById('splitSegmentsCheckbox').checked ? document.getElementById('splitModeSelect').value : 'default'),
+				pitch: 0,
+				split_segments: true,
+				split_mode: c.split_mode || document.getElementById('splitModeSelect').value,
 				cfg_strength: parseFloat(document.getElementById('cfgSlider').value),
 				steps: parseInt(document.getElementById('stepsSlider').value),
 				sway: parseFloat(document.getElementById('swaySlider').value),
@@ -1643,6 +1629,11 @@ function renderChunks(chunks) {
       </div>`;
 	}
 	chunkList.innerHTML = html;
+	// Restore expanded chunks after re-render
+	for (const idx of _expandedChunks) {
+		const body = document.getElementById(`chunkBody_${idx}`);
+		if (body) body.classList.add('open');
+	}
 }
 
 function formatDuration(seconds) {
@@ -1707,7 +1698,13 @@ function toggleAdv(el) {
 
 function toggleChunk(index) {
 	const body = document.getElementById(`chunkBody_${index}`);
-	if (body) body.classList.toggle('open');
+	if (!body) return;
+	body.classList.toggle('open');
+	if (body.classList.contains('open')) {
+		_expandedChunks.add(index);
+	} else {
+		_expandedChunks.delete(index);
+	}
 }
 
 function toggleEdit(index) {
@@ -1831,7 +1828,8 @@ function playChunk(index) {
 	if (old) old.remove();
 	const wrap = document.createElement('div');
 	wrap.id = 'chunkPlayer';
-	wrap.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;';
+	const hasProgress = progressFloat.classList.contains('visible');
+	wrap.style.cssText = `position:fixed;bottom:${hasProgress ? '100px' : '24px'};left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;`;
 	const label = document.createElement('span');
 	label.style.cssText = 'font-size:13px;color:var(--text-primary);white-space:nowrap;font-weight:600;';
 	label.textContent = 'Segment ' + (index + 1) + ':';
@@ -1873,6 +1871,8 @@ async function _regenChunk(index, text) {
 	const c = CHUNK_DATA.find(x => x.index === index);
 	const vid = c?.voice_id || CURRENT_VOICE_ID;
 	try {
+		c.status = 'processing';
+		renderChunks(CHUNK_DATA);
 		const res = await fetch(`${API_BASE}/tts/regenerate_chunk`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
@@ -1880,16 +1880,18 @@ async function _regenChunk(index, text) {
 		});
 		if (!res.ok) throw new Error('Regen failed');
 		const data = await res.json();
-		const c = CHUNK_DATA.find(x => x.index === index);
-		if (c) { c.status = 'done'; c.audio_url = data.audio_url; c.text = text; }
+		c.status = data.status === 'done' ? 'done' : 'error';
+		c.audio_url = data.audio_url;
+		c.error = data.status === 'error' ? (data.issues?.[0]?.message || 'Regen error') : null;
+		c.text = text;
 		renderChunks(CHUNK_DATA);
-		const statusRes = await fetch(`${API_BASE}/tts/status/${CURRENT_TASK_ID}`);
-		if (statusRes.ok) {
-			const statusData = await statusRes.json();
-			renderChunks(statusData.chunks || []);
-		}
-		showToast('Segment ' + (index + 1) + ' regenerated');
-	} catch (e) { showError('Regen chunk: ' + e.message); }
+		showToast(data.status === 'done' ? `Segment ${index + 1} regenerated` : `Segment ${index + 1} failed`);
+	} catch (e) {
+		c.status = 'error';
+		c.error = e.message;
+		renderChunks(CHUNK_DATA);
+		showError('Regen chunk: ' + e.message);
+	}
 }
 
 function showToast(msg) {

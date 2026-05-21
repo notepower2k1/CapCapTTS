@@ -10,6 +10,7 @@ backend/custom_dict/_history.json
 backend_cpu/custom_dict/_history.json
 backend/custom_dict/_pause.json
 backend_cpu/custom_dict/_pause.json
+resources/
 *.egg-info/
 dist/
 build/

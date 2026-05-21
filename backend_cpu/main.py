@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import csv
 import asyncio
 import time
 import io
@@ -16,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pydub import AudioSegment
 
-import json
 import aiohttp
 import aiofiles
 from huggingface_hub import HfApi
@@ -27,6 +27,7 @@ from tts_engine import (
     PiperEngine, TaskManager,
     chunk_text_sentences, merge_audio_segments,
     normalize_vietnamese, clean_text,
+    _chunk_hybrid, get_chunk_config,
 )
 
 
@@ -280,51 +281,48 @@ async def _run_generation(task_id: str):
         await task_manager.update(task_id, status="processing", progress=0, stage="splitting")
         if do_clean:
             text = clean_text(text)
-        raw_chunks = chunk_text_sentences(text)
-        if not raw_chunks:
+
+        cfg = get_chunk_config("low")
+        if split_mode == "sentence":
+            chunks = _chunk_hybrid(text, min_chars=10, target_chars=10, max_chars=cfg["hard_max"], hard_max_chars=cfg["hard_max"])
+            is_new_para = [False] * len(chunks)
+        elif split_mode == "paragraph":
+            chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["max_chars"], max_chars=cfg["hard_max"], hard_max_chars=cfg["hard_max"])
+            is_new_para = [True] * len(chunks)
+        else:
+            chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["target_chars"], max_chars=cfg["max_chars"], hard_max_chars=cfg["hard_max"])
+            is_new_para = []
+            raw_paragraphs = re.split(r'\n\s*\n', text.strip())
+            for p in raw_paragraphs:
+                p = p.strip()
+                if not p:
+                    continue
+                sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', p) if s.strip()]
+                if sents:
+                    is_new_para.append(True)
+                    is_new_para.extend([False] * (len(sents) - 1))
+            is_new_para = is_new_para[:len(chunks)] if len(is_new_para) >= len(chunks) else is_new_para + [False] * (len(chunks) - len(is_new_para))
+
+        if not chunks:
             await task_manager.update(task_id, status="error", error="No text to process")
             return
 
-        if split_mode == "sentence":
-            sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
-            if not sents:
-                sents = [text]
-            orig_texts = sents
-            gen_texts = list(sents)
-            is_new_para = [False] * len(sents)
-        elif split_mode == "paragraph":
-            paras = [p.strip() for p in re.split(r'\n\s*\n', text.strip()) if p.strip()]
-            orig_texts = paras
-            gen_texts = list(paras)
-            is_new_para = [True] * len(paras)
-        else:
-            raw_paragraphs = re.split(r'\n\s*\n', text.strip())
-            para_sentence_counts = []
-            for p in raw_paragraphs:
-                p = p.strip()
-                if p:
-                    sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', p) if s.strip()]
-                    para_sentence_counts.append(len(sents))
-            is_new_para = []
-            for count in para_sentence_counts:
-                for j in range(count):
-                    is_new_para.append(j == 0)
-            orig_texts = list(raw_chunks)
-            gen_texts = list(raw_chunks)
-
         if do_normalize:
-            gen_texts = [normalize_with_pause_protection(c) for c in orig_texts]
+            gen_texts = [normalize_with_pause_protection(c) for c in chunks]
+        else:
+            gen_texts = list(chunks)
 
         voice_id = task["voice_id"]
 
         chunks_data = []
-        for i in range(len(orig_texts)):
+        for i in range(len(chunks)):
             chunks_data.append({
-                "index": i, "text": orig_texts[i], "gen_text": gen_texts[i],
+                "index": i, "text": chunks[i], "gen_text": gen_texts[i],
                 "new_paragraph": is_new_para[i] if i < len(is_new_para) else False,
                 "status": "pending", "audio_path": None, "error": None,
                 "voice_id": voice_id,
             })
+        orig_texts = chunks
         await task_manager.set_chunks(task_id, chunks_data)
 
         await task_manager.update(task_id, status="processing", progress=5, stage="generating")

@@ -83,7 +83,7 @@ _RESOURCE_DEFS = [
         "id": "omnivoice",
         "label": "OmniVoice Model (High · GPU)",
         "desc": "Model weights + tokenizer (~2.3GB)",
-        "repo_id": "Hacht/omnivoice-vietnamese",
+        "repo_id": "kjanh/KhanhTTS-OmniVoice",
         "files": [
             "model.safetensors",
             "config.json",
@@ -236,6 +236,7 @@ from tts_engine import (
     PiperEngine, F5Engine, OmniVoiceEngine, TaskManager,
     chunk_text_sentences, merge_audio_segments,
     normalize_vietnamese, clean_text,
+    _chunk_hybrid, get_chunk_config,
 )
 
 # ─── Synthesis ───
@@ -460,7 +461,7 @@ class TTSRequest(BaseModel):
     speed: float = 1.0
     pitch: float = 0.0
     volume: float = 0.0
-    split_segments: bool = False
+    split_segments: bool = True
     split_mode: str = "default"
     cfg_strength: float = 2.0
     steps: int = 32
@@ -709,69 +710,52 @@ async def _run_generation(task_id: str):
     engine_type = _validate_voice_mode(voice_mode)
     do_normalize = task.get("normalize")
     do_clean = task.get("clean")
-    split_seg = task.get("split_segments", False)
     split_mode = task.get("split_mode", "default")
 
     try:
         await task_manager.update(task_id, status="processing", progress=0, stage="splitting")
         if do_clean:
             text = clean_text(text)
-        raw_chunks = chunk_text_sentences(text)
-        if not raw_chunks:
+
+        cfg = get_chunk_config(engine_type)
+        if split_mode == "sentence":
+            chunks = _chunk_hybrid(text, min_chars=10, target_chars=10, max_chars=cfg["hard_max"], hard_max_chars=cfg["hard_max"])
+            is_new_para = [False] * len(chunks)
+        elif split_mode == "paragraph":
+            chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["max_chars"], max_chars=cfg["hard_max"], hard_max_chars=cfg["hard_max"])
+            is_new_para = [True] * len(chunks)
+        else:
+            chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["target_chars"], max_chars=cfg["max_chars"], hard_max_chars=cfg["hard_max"])
+            is_new_para = []
+            raw_paragraphs = re.split(r'\n\s*\n', text.strip())
+            for p in raw_paragraphs:
+                p = p.strip()
+                if not p:
+                    continue
+                sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', p) if s.strip()]
+                if sents:
+                    is_new_para.append(True)
+                    is_new_para.extend([False] * (len(sents) - 1))
+            is_new_para = is_new_para[:len(chunks)] if len(is_new_para) >= len(chunks) else is_new_para + [False] * (len(chunks) - len(is_new_para))
+
+        if not chunks:
             await task_manager.update(task_id, status="error", error="No text to process")
             return
 
-        if split_seg:
-            if split_mode == "sentence":
-                # Split by sentence only — no paragraph tracking
-                sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text.strip()) if s.strip()]
-                if not sents:
-                    sents = [text]
-                orig_texts = sents
-                gen_texts = list(sents)
-                is_new_para = [False] * len(sents)
-            elif split_mode == "paragraph":
-                # Split by paragraph only — each paragraph is one chunk
-                raw_paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text.strip()) if p.strip()]
-                orig_texts = list(raw_paragraphs)
-                gen_texts = list(raw_paragraphs)
-                is_new_para = [True] * len(orig_texts)
-            else:
-                # Default: paragraph + sentence
-                raw_paragraphs = re.split(r'\n\s*\n', text.strip())
-                para_sentence_counts = []
-                for p in raw_paragraphs:
-                    p = p.strip()
-                    if p:
-                        sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', p) if s.strip()]
-                        para_sentence_counts.append(len(sents))
-                is_new_para = []
-                for count in para_sentence_counts:
-                    for j in range(count):
-                        is_new_para.append(j == 0)
-                orig_texts = list(raw_chunks)
-                gen_texts = list(raw_chunks)
-            if do_normalize:
-                gen_texts = [normalize_with_pause_protection(c) for c in orig_texts]
-            chunks_data = []
-            for i in range(len(orig_texts)):
-                chunks_data.append({
-                    "index": i, "text": orig_texts[i], "gen_text": gen_texts[i],
-                    "new_paragraph": is_new_para[i] if i < len(is_new_para) else False,
-                    "status": "pending", "audio_path": None, "error": None,
-                    "voice_id": voice_id,
-                })
+        if do_normalize:
+            gen_texts = [normalize_with_pause_protection(c) for c in chunks]
         else:
-            # Non-split mode: one chunk, full text
-            gen_text = normalize_with_pause_protection(text) if do_normalize else text
-            chunks_data = [{
-                "index": 0, "text": text, "gen_text": gen_text,
-                "new_paragraph": False, "status": "pending", "audio_path": None, "error": None,
+            gen_texts = list(chunks)
+        chunks_data = []
+        for i in range(len(chunks)):
+            chunks_data.append({
+                "index": i, "text": chunks[i], "gen_text": gen_texts[i],
+                "new_paragraph": is_new_para[i] if i < len(is_new_para) else False,
+                "status": "pending", "audio_path": None, "error": None,
                 "voice_id": voice_id,
-            }]
-            orig_texts = [text]
-            gen_texts = [gen_text]
+            })
 
+        orig_texts = chunks
         await task_manager.set_chunks(task_id, chunks_data)
 
         await task_manager.update(task_id, status="processing", progress=5, stage="generating")
@@ -786,20 +770,51 @@ async def _run_generation(task_id: str):
         sway_val = task.get("sway", -1.0)
         num_step_val = task.get("num_step", 16)
         td = task_dir(task_id)
-        output_format = task.get("output_format", "mp3")
 
-        if not split_seg:
-            t_synth = time.time()
-            skip_ps = True
-            gen_text = gen_texts[0]
-            has_markers = bool(CUSTOM_PAUSE_RE.search(gen_text))
-            if engine_type == "medium":
-                f5_engine._force_single = True
-            try:
-                if engine_type in ("medium", "high") and not has_markers:
-                    def _do_infer():
+        # Always split — punctuation pauses, custom [Xs] pauses, per-chunk retry
+        t_synth = time.time()
+        if engine_type == "low":
+            # Piper: parallel synthesis (CPU threads)
+            from functools import partial
+            def _synth_one(i):
+                chunk_gen_text = gen_texts[i]
+                lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
+                seg = synthesize_with_pauses(piper_engine, f5_engine, omnivoice_engine,
+                    chunk_gen_text, engine_type, voice_id, pause_cfg,
+                    speed=spd, pitch=pit, volume=vol, normalize_audio=norm_audio,
+                    cfg_strength=cfg_val, steps=steps_val, sway=sway_val, num_step=num_step_val)
+                if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
+                    seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
+                chunk_filename = f"chunk_{i}.wav"
+                chunk_path = td / chunk_filename
+                seg.export(str(chunk_path), format="wav")
+                chunk_dur = round(len(seg) / 1000, 3)
+                quality = evaluate_segment_quality(orig_texts[i], None, None, seg)
+                return i, chunk_filename, chunk_dur, quality
+
+            tasks = [loop.run_in_executor(None, _synth_one, i) for i in range(len(orig_texts))]
+            for coro in asyncio.as_completed(tasks):
+                i, chunk_filename, chunk_dur, quality = await coro
+                await task_manager.update_chunk(task_id, i, status="processing")
+                await task_manager.set_chunk_audio_with_quality(task_id, i,
+                    f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
+                await task_manager.recalc_progress(task_id)
+        else:
+            # GPU engines: serial with lock, inference only under lock
+            for i in range(len(orig_texts)):
+                await task_manager.update_chunk(task_id, i, status="processing")
+                await task_manager.recalc_progress(task_id)
+                chunk_gen_text = gen_texts[i]
+
+                has_markers = bool(CUSTOM_PAUSE_RE.search(chunk_gen_text))
+                pauses = pause_cfg.get("pauses", {})
+                pause_enabled = pause_cfg.get("enabled", True)
+                pause_re = _build_pause_re(pauses) if pause_enabled else None
+                has_punctuation_pauses = pause_re is not None and pause_re.search(chunk_gen_text)
+                if engine_type in ("medium", "high") and not has_markers and not has_punctuation_pauses:
+                    def _do_infer(t=chunk_gen_text, et=engine_type, vid=voice_id, s=spd):
                         return _synthesize_one(piper_engine, f5_engine, omnivoice_engine,
-                            engine_type, gen_text, voice_id, speed=spd, pitch=pit, volume=vol,
+                            et, t, vid, speed=s, pitch=pit, volume=vol,
                             normalize_audio=norm_audio, cfg_strength=cfg_val, steps=steps_val,
                             sway=sway_val, num_step=num_step_val, return_raw=True)
                     async with gpu_lock:
@@ -819,115 +834,26 @@ async def _run_generation(task_id: str):
                         audio_raw = audio_raw.apply_gain(vol)
                     seg = audio_raw
                 else:
-                    def _do_full(t=gen_text, et=engine_type, vid=voice_id, pc=pause_cfg, s=spd, p=pit, v=vol, na=norm_audio, sps=skip_ps, cf=cfg_val, ns=steps_val, sw=sway_val, nms=num_step_val):
-                        return synthesize_with_pauses(piper_engine, f5_engine, omnivoice_engine, t, et, vid, pc, speed=s, pitch=p, volume=v, normalize_audio=na, skip_pause_split=sps, cfg_strength=cf, steps=ns, sway=sw, num_step=nms)
-                    if engine_type in ("medium", "high"):
-                        async with gpu_lock:
-                            seg = await loop.run_in_executor(None, _do_full)
-                    else:
-                        seg = await loop.run_in_executor(None, _do_full)
-            finally:
-                if engine_type == "medium":
-                    f5_engine._force_single = False
-
-            t_synth_end = time.time()
-
-            def _post(segment):
-                s = segment.strip_silence(silence_len=100, silence_thresh=-50)
-                return s.fade_in(8).fade_out(12)
-            seg = await loop.run_in_executor(None, _post, seg)
-
-            def _compress(m):
-                return m.compress_dynamic_range(threshold=-20, ratio=2.0, attack=5, release=50)
-            seg = await loop.run_in_executor(None, _compress, seg)
-
-            chunk_dur = round(len(seg) / 1000, 3)
-            print(f"[TTS] non-split synth total={t_synth_end-t_synth:.2f}s post={time.time()-t_synth_end:.2f}s engine={engine_type} chars={len(text)} dur={chunk_dur}s")
-
-            quality = await loop.run_in_executor(None, evaluate_segment_quality, text, None, None, seg)
-
-            chunk_path = td / "chunk_0.wav"
-            seg.export(str(chunk_path), format="wav")
-            await task_manager.set_chunk_audio_with_quality(task_id, 0,
-                f"/tts/download_file?path={task_id}/chunk_0.wav", duration=chunk_dur, quality=quality)
-
-            output_filename = f"final.{output_format}"
-            output_path = td / output_filename
-            seg.export(str(output_path), format=output_format, bitrate="320k")
-
-            def _ms2srt(ms):
-                h, rem = divmod(ms, 3600000)
-                m, rem = divmod(rem, 60000)
-                s, ms = divmod(rem, 1000)
-                return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-            srt_lines = ["1", f"00:00:00,000 --> {_ms2srt(int(chunk_dur * 1000))}",
-                         text.strip().replace("\n", " "), ""]
-            srt_path = td / "final.srt"
-            with open(srt_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(srt_lines))
-
-            duration = round(chunk_dur, 2)
-            audio_url = f"/tts/download_file?path={task_id}/{output_filename}"
-            await task_manager.update(task_id, status="done", progress=100, stage="done",
-                audio_url=audio_url, duration=duration)
-            await _save_segments_meta(task_id)
-            await _save_history(task_id)
-        else:
-            # Per-sentence chunking
-            t_synth = time.time()
-            if engine_type == "low":
-                # Piper: parallel synthesis (CPU threads)
-                from functools import partial
-                def _synth_one(i):
-                    chunk_gen_text = gen_texts[i]
-                    lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
-                    seg = synthesize_with_pauses(piper_engine, f5_engine, omnivoice_engine,
-                        chunk_gen_text, engine_type, voice_id, pause_cfg,
-                        speed=spd, pitch=pit, volume=vol, normalize_audio=norm_audio,
-                        cfg_strength=cfg_val, steps=steps_val, sway=sway_val, num_step=num_step_val)
-                    if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
-                        seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
-                    chunk_filename = f"chunk_{i}.wav"
-                    chunk_path = task_dir(task_id) / chunk_filename
-                    seg.export(str(chunk_path), format="wav")
-                    chunk_dur = round(len(seg) / 1000, 3)
-                    quality = evaluate_segment_quality(orig_texts[i], None, None, seg)
-                    return i, chunk_filename, chunk_dur, quality
-
-                tasks = [loop.run_in_executor(None, _synth_one, i) for i in range(len(orig_texts))]
-                for coro in asyncio.as_completed(tasks):
-                    i, chunk_filename, chunk_dur, quality = await coro
-                    await task_manager.update_chunk(task_id, i, status="processing")
-                    await task_manager.set_chunk_audio_with_quality(task_id, i,
-                        f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
-                    await task_manager.recalc_progress(task_id)
-            else:
-                for i in range(len(orig_texts)):
-                    await task_manager.update_chunk(task_id, i, status="processing")
-                    await task_manager.recalc_progress(task_id)
-                    chunk_gen_text = gen_texts[i]
-
                     def _do_synth(t=chunk_gen_text, et=engine_type, vid=voice_id, pc=pause_cfg, s=spd, p=pit, v=vol, na=norm_audio, cf=cfg_val, ns=steps_val, sw=sway_val, nms=num_step_val):
                         return synthesize_with_pauses(piper_engine, f5_engine, omnivoice_engine, t, et, vid, pc, speed=s, pitch=p, volume=v, normalize_audio=na, cfg_strength=cf, steps=ns, sway=sw, num_step=nms)
+                    async with gpu_lock:
+                        seg = await loop.run_in_executor(None, _do_synth)
 
-                    seg = await loop.run_in_executor(None, _do_synth)
+                lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
+                if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
+                    seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
 
-                    lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
-                    if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
-                        seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
+                chunk_filename = f"chunk_{i}.wav"
+                chunk_path = td / chunk_filename
+                seg.export(str(chunk_path), format="wav")
+                chunk_dur = round(len(seg) / 1000, 3)
+                quality = await loop.run_in_executor(None, evaluate_segment_quality, orig_texts[i], None, None, seg)
+                await task_manager.set_chunk_audio_with_quality(task_id, i, f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
+                await task_manager.recalc_progress(task_id)
 
-                    chunk_filename = f"chunk_{i}.wav"
-                    chunk_path = task_dir(task_id) / chunk_filename
-                    seg.export(str(chunk_path), format="wav")
-                    chunk_dur = round(len(seg) / 1000, 3)
-                    quality = await loop.run_in_executor(None, evaluate_segment_quality, orig_texts[i], None, None, seg)
-                    await task_manager.set_chunk_audio_with_quality(task_id, i, f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
-                    await task_manager.recalc_progress(task_id)
-
-            print(f"[TTS] split synth total={time.time()-t_synth:.2f}s engine={engine_type} chunks={len(orig_texts)} chars={len(text)}")
-            # Save segment metadata so SRT can be generated later
-            await _save_segments_meta(task_id)
-            await task_manager.update(task_id, status="chunks_done", progress=85, stage="chunks_done")
+        print(f"[TTS] synth total={time.time()-t_synth:.2f}s engine={engine_type} chunks={len(orig_texts)} chars={len(text)}")
+        await _save_segments_meta(task_id)
+        await task_manager.update(task_id, status="chunks_done", progress=85, stage="chunks_done")
 
     except Exception as e:
         td = task_dir(task_id)

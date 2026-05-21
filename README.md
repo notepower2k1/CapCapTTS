@@ -24,8 +24,8 @@ A self-hosted Vietnamese Text-to-Speech tool that runs entirely on your machine.
   - **Medium (F5-TTS)** — High-quality zero-shot voice cloning, GPU recommended
   - **High (OmniVoice)** — Best quality, HuggingFace model, GPU required
 - **Shared voice library** — F5 and OmniVoice share the same reference audio & text
-- **Chunk-based generation** — Long text split into segments, generated with progress tracking
-- **Multiple split modes** — Split by sentence, paragraph, or both (default)
+- **Chunk-based generation** — Text always split into segments with hybrid chunking (merge short sentences, split long ones via comma/space); progress tracked per segment
+- **Split mode selector** — Choose sentence-level, paragraph-level, or hybrid (default) chunking
 - **Per-segment voice selection** — Assign different voices to individual segments
 - **Segment quality check** — Auto-detects incomplete speech, low volume, excessive silence, clipping
 - **Segment download** — Download individual segments (WAV), all segments as ZIP, or merged audio (MP3/WAV/SRT)
@@ -33,7 +33,6 @@ A self-hosted Vietnamese Text-to-Speech tool that runs entirely on your machine.
 - **Voice management** — Browse, filter by gender/type (clone/default), edit description, delete cloned voices
 - **File queue** — Drag & drop multiple `.txt` files, batch process with per-file config (voice, split mode, speed)
 - **Auto-merge** — Multi-segment results automatically merged after generation
-- **Segment quality check** — Auto-detects incomplete speech, low volume, excessive silence, clipping
 - **Dark mode** — Toggle in header, persists across sessions
 - **Custom dictionary** — Override pronunciation for acronyms and non-Vietnamese words
 - **Pause control** — Adjustable silence after punctuation + custom `[Xs]` markers
@@ -148,7 +147,7 @@ The project does not include model weights. Download and place them according to
 | `PIPER_DIR` | Piper `.onnx` voice models + `.onnx.json` configs | [Hugging face]([https://huggingface.co/Hacht/CapCapResource](https://huggingface.co/Hacht/CapCapResource/tree/main/piper)) |
 | `F5_MODEL_DIR` | F5-TTS checkpoint (`model_last_repo_compatible_weights.pt`) + `vocab.txt` | [Hugging face](https://huggingface.co/Hacht/CapCapResource) |
 | `F5_VOCODER_DIR` | Vocos vocoder (`vocos-mel-24khz`) | Bundled with F5-TTS |
-| `F5_VOICES_DIR` | Reference audio (`.wav`/`.mp3`) + `voices.json` for F5 + OmniVoice voices | [OmniVoice voices.json](https://huggingface.co/Hacht/omnivoice-vietnamese) |
+| `F5_VOICES_DIR` | Reference audio (`.wav`/`.mp3`) + `voices.json` for F5 + OmniVoice voices | [OmniVoice voices.json](https://huggingface.co/kjanh/KhanhTTS-OmniVoice) |
 | `F5_VOICES_DIR` | Your own cloned voice recordings | Your own recordings |
 
 > **Note:** F5-TTS and OmniVoice **share the same voice directory**. The `voices.json` file defines available voices with reference audio and text. Both engines read from this shared pool.
@@ -165,7 +164,20 @@ If using the GPU version with F5-TTS:
 
 ## Quick Start
 
-### GPU Version (Piper + F5-TTS)
+### Portable Mode (No Python Install Needed)
+
+```bash
+setup_portable.bat cpu      # Download portable Python + deps
+run_api_cpu_portable.bat    # Start server
+```
+
+Or for GPU:
+```bash
+setup_portable.bat gpu
+run_api_gpu_portable.bat
+```
+
+### GPU Version (Piper + F5-TTS + OmniVoice)
 
 ```bash
 cd backend
@@ -252,10 +264,17 @@ TTS/
 │   └── custom_dict/
 ├── frontend/
 │   ├── index.html        # Single-page UI
-│   ├── capcap.svg        # Logo
+│   ├── app.js            # Frontend logic
+│   ├── style.css         # Styles
+│   ├── capcap.png        # Logo
 │   └── jszip.min.js      # ZIP export library
 ├── run_api.bat           # Launch GPU version
 ├── run_api_cpu.bat       # Launch CPU version
+├── run_api_gpu_portable.bat  # Launch GPU with portable Python
+├── run_api_cpu_portable.bat  # Launch CPU with portable Python
+├── setup_portable.bat    # Setup portable Python (no install needed)
+├── build_gpu.bat         # Build GPU .exe with PyInstaller
+├── build_cpu.bat         # Build CPU .exe with PyInstaller
 ├── screenshot.png        # UI screenshot
 └── README.md
 ```
@@ -307,7 +326,7 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 This project builds on and references the following open-source projects:
 
-- [OmniVoice Vietnamese](https://huggingface.co/Hacht/omnivoice-vietnamese) — High-quality Vietnamese TTS (High tier)
+- [OmniVoice Vietnamese](https://huggingface.co/kjanh/KhanhTTS-OmniVoice) — High-quality Vietnamese TTS (High tier)
 - [F5-TTS-Vietnamese](https://github.com/nguyenthienhy/F5-TTS-Vietnamese) — Vietnamese voice cloning (Medium tier)
 - [vietnormalizer](https://github.com/nghimestudio/vietnormalizer) — Vietnamese text normalization
 - [piper](https://github.com/rhasspy/piper) — Local text-to-speech synthesis (Low tier)

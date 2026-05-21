@@ -129,34 +129,133 @@ def clean_text(text: str) -> str:
 
 
 def chunk_text_sentences(text: str, max_chars: int = 0) -> list[str]:
-    # Split paragraphs first (blank lines), then sentences within each paragraph
-    paragraphs = re.split(r'\n\s*\n', text.strip())
-    sentences = []
-    for p in paragraphs:
-        p = p.strip()
-        if not p:
-            continue
-        parts = re.split(r'(?<=[.!?])\s+', p)
-        for s in parts:
-            s = s.strip()
-            if s:
-                sentences.append(s)
-    if not sentences:
+    return _chunk_hybrid(text, max_chars)
+
+# ─── Hybrid chunking (protect → sentence → merge → split) ───
+
+_PROTECT_TOKEN_RE = re.compile(
+    r'(https?://[^\s]+)'
+    r'|([\w.+-]+@[\w-]+\.[\w.]+)'
+    r'|(\b\d+\.\d+(?:%|x|X)?\b)'
+    r'|(\bv?\d+(?:\.\d+)+\b)'
+)
+
+_CHUNK_ENGINE_PRESETS = {
+    "low":    {"min_chars": 60,  "target_chars": 140, "max_chars": 240, "hard_max": 320},
+    "medium": {"min_chars": 60,  "target_chars": 140, "max_chars": 240, "hard_max": 320},
+    "high":   {"min_chars": 80,  "target_chars": 180, "max_chars": 320, "hard_max": 420},
+}
+
+
+def _protect_tokens(text: str):
+    placeholders = {}
+    def _replace(m):
+        key = f"__P{len(placeholders)}__"
+        placeholders[key] = m.group(0)
+        return key
+    return _PROTECT_TOKEN_RE.sub(_replace, text), placeholders
+
+
+def _restore_tokens(text: str, placeholders: dict) -> str:
+    for key, val in placeholders.items():
+        text = text.replace(key, val)
+    return text
+
+
+def _split_long_chunk(text: str, limit: int) -> list[str]:
+    parts = re.split(r'(?<=[;:])\s+', text)
+    if len(parts) > 1 and all(len(p) <= limit for p in parts):
+        return [p.strip() for p in parts if p.strip()]
+    parts = re.split(r'(?<=,)\s+', text)
+    if len(parts) > 1 and all(len(p) <= limit for p in parts):
+        return [p.strip() for p in parts if p.strip()]
+    result = []
+    remaining = text
+    while len(remaining) > limit:
+        fwd = remaining.rfind(' ', 0, limit + 1)
+        bwd = remaining.find(' ', limit)
+        cut = fwd if fwd > limit // 2 else (bwd if bwd > 0 else limit)
+        result.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+    if remaining:
+        result.append(remaining)
+    return result
+
+
+def _chunk_hybrid(text: str, max_chars: int = 0, min_chars: int = 0,
+                  target_chars: int = 0, hard_max_chars: int = 0) -> list[str]:
+    if not text or not text.strip():
         return []
     if max_chars <= 0:
-        return sentences
+        max_chars = hard_max_chars or 320
+    effective_min = min_chars or max(30, max_chars // 4)
+    effective_target = target_chars or max_chars // 2
+
+    text = re.sub(r'\r\n', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = text.strip()
+
+    protected, pmap = _protect_tokens(text)
+
+    paragraphs = re.split(r'\n\s*\n', protected)
+
     chunks = []
-    current = ""
-    for s in sentences:
-        if len(current) + len(s) + 1 <= max_chars:
-            current = (current + " " + s).strip()
-        else:
-            if current:
-                chunks.append(current)
-            current = s
-    if current:
-        chunks.append(current)
-    return chunks
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', para) if s.strip()]
+        if not sentences:
+            continue
+
+        merged = []
+        buf = ""
+        for s in sentences:
+            candidate = (buf + " " + s).strip() if buf else s
+            if len(candidate) <= effective_target:
+                buf = candidate
+            else:
+                if buf:
+                    merged.append(buf)
+                buf = s
+        if buf:
+            merged.append(buf)
+
+        for i in range(len(merged)):
+            m = merged[i]
+            if len(m) < effective_min and i > 0:
+                candidate = (merged[i - 1] + " " + m).strip()
+                if len(candidate) <= max_chars:
+                    merged[i - 1] = candidate
+                    merged[i] = ""
+        merged = [m for m in merged if m]
+
+        for m in merged:
+            if len(m) <= max_chars:
+                chunks.append(m)
+            else:
+                chunks.extend(_split_long_chunk(m, max_chars))
+
+        # Re-merge chunks that became too small after splitting
+        i = 1
+        while i < len(chunks):
+            if len(chunks[i]) < effective_min:
+                candidate = (chunks[i - 1] + " " + chunks[i]).strip()
+                if len(candidate) <= max_chars:
+                    chunks[i - 1] = candidate
+                    chunks.pop(i)
+                    continue
+            i += 1
+
+    if pmap:
+        chunks = [_restore_tokens(c, pmap) for c in chunks]
+    return chunks if chunks else [text]
+
+
+def get_chunk_config(engine_type: str) -> dict:
+    """Return (min_chars, target_chars, max_chars, hard_max) for an engine."""
+    return dict(_CHUNK_ENGINE_PRESETS.get(engine_type, _CHUNK_ENGINE_PRESETS["low"]))
 
 
 def merge_audio_segments(segments: list[AudioSegment]) -> AudioSegment:
@@ -219,7 +318,7 @@ class PiperEngine:
         voice = self._load_voice(voice_id)
         syn_cfg = SynthesisConfig(
             noise_scale=0.667,
-            length_scale=max(0.5, min(2.0, speed)),
+            length_scale=max(0.5, min(2.0, 1.0 / speed)),
             noise_w_scale=0.8,
         )
         segments = []
@@ -564,7 +663,7 @@ class OmniVoiceEngine:
         else:
             _report("Downloading OmniVoice model from HuggingFace...", 5)
             self.model = OmniVoice.from_pretrained(
-                "Hacht/omnivoice-vietnamese",
+                "kjanh/KhanhTTS-OmniVoice",
                 device_map="cuda:0",
                 dtype=torch.float16,
             )
@@ -672,6 +771,7 @@ class OmniVoiceEngine:
             language="vietnamese",
             voice_clone_prompt=prompt,
             generation_config=gen_cfg,
+            speed=speed,
         )
 
         # audio is numpy array [channels, samples] or [samples]

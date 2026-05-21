@@ -145,24 +145,19 @@
 							<input type="checkbox" id="normalizeAudioCheckbox">
 							<span>Normalize volume</span>
 						</label>
-						<label class="checkbox-label" id="splitSegmentsLabel"
-							style="border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px;">
-							<input type="checkbox" id="splitSegmentsCheckbox">
-							<span>Split segments</span>
-							<span style="font-size:11px;color:var(--error);font-weight:400;margin-left:4px;">(OFF for
-								faster)</span>
-							<span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:4px;">— But
-								no
-								per-sentence editing & paragraph pauses</span>
-						</label>
-						<div id="splitModeOptions" style="display:none;margin-top:8px;">
-							<select id="splitModeSelect"
-								style="width:100%;padding:6px 10px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-								<option value="default">Default (paragraph + sentence)</option>
-								<option value="sentence">By sentence</option>
-								<option value="paragraph">By paragraph</option>
-							</select>
-						</div>
+					<label class="checkbox-label" id="splitSegmentsLabel"
+						style="border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px;display:none;">
+						<input type="checkbox" id="splitSegmentsCheckbox" checked>
+						<span>Split segments</span>
+					</label>
+					<div id="splitModeOptions" style="margin-top:8px;">
+						<select id="splitModeSelect"
+							style="width:100%;padding:6px 10px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
+							<option value="default">Default (paragraph + sentence)</option>
+							<option value="sentence">By sentence</option>
+							<option value="paragraph">By paragraph</option>
+						</select>
+					</div>
 					</div>
 				</div>
 
@@ -207,21 +202,16 @@
 						Advanced
 					</div>
 					<div id="advPanel" class="hidden" style="margin-top:14px;">
-						<div class="slider-row">
-							<span class="slider-label">Speed</span>
-							<input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1">
-							<span class="slider-value" id="speedVal">1.0×</span>
-						</div>
-						<div class="slider-row">
-							<span class="slider-label">Pitch</span>
-							<input type="range" id="pitchSlider" min="-5" max="5" step="0.5" value="0">
-							<span class="slider-value" id="pitchVal">0</span>
-						</div>
-						<div class="slider-row">
-							<span class="slider-label">Volume</span>
-							<input type="range" id="volumeSlider" min="-10" max="10" step="1" value="0">
-							<span class="slider-value" id="volumeVal">0 dB</span>
-						</div>
+					<div class="slider-row">
+						<span class="slider-label">Speed</span>
+						<input type="range" id="speedSlider" min="0.8" max="1.2" step="0.05" value="1">
+						<span class="slider-value" id="speedVal">1.0×</span>
+					</div>
+					<div class="slider-row">
+						<span class="slider-label">Volume</span>
+						<input type="range" id="volumeSlider" min="-10" max="10" step="1" value="0">
+						<span class="slider-value" id="volumeVal">0 dB</span>
+					</div>
 						<div id="modelConfig" class="hidden"
 							style="margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
 							<div
@@ -247,7 +237,7 @@
 							<div class="slider-row" id="numStepRow"
 								title="More steps = better quality but slower. 8 is a good balance.">
 								<span class="slider-label">Quality</span>
-								<input type="range" id="numStepSlider" min="4" max="32" step="4" value="16">
+								<input type="range" id="numStepSlider" min="4" max="64" step="4" value="32">
 								<span class="slider-value" id="numStepVal">16</span>
 							</div>
 						</div>

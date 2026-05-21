@@ -6,19 +6,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def _env_path(key: str, default: str) -> Path:
     return Path(os.environ.get(key, default))
 
-_DEFAULT_RESOURCE = PROJECT_ROOT.parent / "TTS_Resource"
+_RESOURCE_DIR = PROJECT_ROOT / "resources"
 
-PIPER_DIR = _env_path("PIPER_DIR", str(_DEFAULT_RESOURCE / "piper"))
-
-# Paths for download feature (F5/OmniVoice resources — requires GPU to use)
-F5_RESOURCE_DIR = _env_path("F5_RESOURCE_DIR", str(_DEFAULT_RESOURCE / "f5"))
-F5_VOICES_DIR = F5_RESOURCE_DIR / "f5_voice"
-OMNIVOICE_MODEL_DIR = F5_RESOURCE_DIR / "omnivoice"
-
-FFMPEG_DIR = _env_path("FFMPEG_DIR", str(PROJECT_ROOT / "ffmpeg" / "bin"))
-
+PIPER_DIR = _env_path("PIPER_DIR", str(_RESOURCE_DIR / "piper"))
 OUTPUT_DIR = PROJECT_ROOT / "backend_cpu" / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+FFMPEG_DIR = _env_path("FFMPEG_DIR", str(PROJECT_ROOT / "ffmpeg" / "bin"))
 
 MAX_TEXT_LENGTH = 5000
 PIPER_SAMPLE_RATE = 22050
