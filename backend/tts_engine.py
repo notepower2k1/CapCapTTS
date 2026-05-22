@@ -670,21 +670,6 @@ class OmniVoiceEngine:
         _report("OmniVoice model loaded", 100)
         self.config = OmniVoiceGenerationConfig(guidance_scale=2.0)
         self._loaded = True
-        self.preload(progress_callback=progress_callback)
-
-    def preload(self, progress_callback=None):
-        voices = self.list_voices()
-        total = len(voices)
-        for idx, v in enumerate(voices):
-            vid = v["id"]
-            try:
-                self._get_voice_prompt(vid)
-                if progress_callback and total > 0:
-                    pct = 50 + int(50 * (idx + 1) / total)
-                    progress_callback(f"Preloaded voice: {vid}", pct)
-                print(f"  [OmniVoice] Preloaded voice: {vid}")
-            except Exception as e:
-                print(f"  [OmniVoice] Failed preload {vid}: {e}")
 
     def _load_meta(self) -> dict:
         meta = {}
