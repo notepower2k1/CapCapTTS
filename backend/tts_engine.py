@@ -49,6 +49,10 @@ os.environ["PATH"] = str(FFMPEG_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 _NORMALIZER_CACHE = {}
 
+def invalidate_normalizer_cache() -> None:
+    """Force the next normalized request to load the current custom dictionaries."""
+    _NORMALIZER_CACHE.clear()
+
 def normalize_vietnamese(text: str) -> str:
     try:
         from vietnormalizer import VietnameseNormalizer, normalizer as vn_mod
@@ -494,7 +498,9 @@ class F5Engine:
             duration = ref_audio_len + int(ref_audio_len / ref_text_len * gen_text_len / local_speed)
 
             with torch.inference_mode():
-                audio_cond = cache["audio"].to(f5_device)
+                # Reuse the cached GPU mel condition. Passing raw audio makes
+                # CFM.sample compute this spectrogram again for every chunk.
+                audio_cond = cache["cond_mel"]
                 generated, _ = self.model.sample(
                     cond=audio_cond,
                     text=final_text_list,
@@ -585,7 +591,6 @@ class F5Engine:
 
         cache = {
             "cond_mel": cond_mel,
-            "audio": audio.detach().cpu(),
             "ref_text": ref_text,
             "ref_text_len": ref_text_len,
             "ref_audio_len": ref_audio_len,
@@ -821,17 +826,8 @@ class TaskManager:
     async def create(self, text: str, voice_mode: str, voice_id: str, output_format: str = "mp3", normalize: bool = False, clean: bool = False, normalize_audio: bool = True, speed: float = 1.0, pitch: float = 0.0, volume: float = 0.0, split_segments: bool = False, split_mode: str = "default", cfg_strength: float = 2.0, steps: int = 32, sway: float = -1.0, num_step: int = 16) -> str:
         task_id = uuid.uuid4().hex[:12]
         engine_type = voice_mode if voice_mode in ("preset", "custom") else "preset"
-        raw_chunks = chunk_text_sentences(text)
+        # Chunking is mode-dependent and is performed once by _run_generation.
         chunks = []
-        for i, c in enumerate(raw_chunks):
-            chunks.append({
-                "index": i,
-                "text": c,
-                "status": "pending",
-                "audio_path": None,
-                "duration": 0,
-                "error": None,
-            })
         async with self._lock:
             self._tasks[task_id] = {
                 "task_id": task_id,

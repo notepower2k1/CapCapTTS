@@ -7,6 +7,7 @@ import time
 import io
 import shutil
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -26,9 +27,20 @@ from tts_quality_checker import evaluate_segment_quality
 from tts_engine import (
     PiperEngine, TaskManager,
     chunk_text_sentences, merge_audio_segments,
-    normalize_vietnamese, clean_text,
+    normalize_vietnamese, invalidate_normalizer_cache, clean_text,
     _chunk_hybrid, get_chunk_config,
 )
+
+
+def _worker_count(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+PIPER_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("PIPER_WORKERS", min(4, os.cpu_count() or 1)))
+AUDIO_IO_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("AUDIO_IO_WORKERS", 2))
 
 
 def _synthesize_one(piper_engine, text: str, voice_id: str, speed: float = 1.0, normalize_audio: bool = True):
@@ -232,7 +244,7 @@ async def preview_tts(req: TTSRequest):
         loop = asyncio.get_running_loop()
         def _do():
             return synthesize_with_pauses(piper_engine, preview_text, voice_id, pause_cfg, speed=req.speed)
-        audio = await loop.run_in_executor(None, _do)
+        audio = await loop.run_in_executor(PIPER_EXECUTOR, _do)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
@@ -329,28 +341,27 @@ async def _run_generation(task_id: str):
         loop = asyncio.get_running_loop()
         pause_cfg = _load_pause_config()
 
-        for i in range(len(orig_texts)):
-            await task_manager.update_chunk(task_id, i, status="processing")
-            await task_manager.recalc_progress(task_id)
-            chunk_gen_text = gen_texts[i]
-            spd = task.get("speed", 1.0)
-            norm_audio = task.get("normalize_audio", True)
+        spd = task.get("speed", 1.0)
+        norm_audio = task.get("normalize_audio", True)
 
-            def _do_synth(t=chunk_gen_text, vid=voice_id, pc=pause_cfg, s=spd, na=norm_audio):
-                return synthesize_with_pauses(piper_engine, t, vid, pc, speed=s, normalize_audio=na)
-
-            seg = await loop.run_in_executor(None, _do_synth)
-
+        def _synth_one(i: int):
+            seg = synthesize_with_pauses(piper_engine, gen_texts[i], voice_id, pause_cfg,
+                speed=spd, normalize_audio=norm_audio)
             lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
             if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
                 seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
-
             chunk_filename = f"chunk_{i}.wav"
-            chunk_path = task_dir(task_id) / chunk_filename
-            seg.export(str(chunk_path), format="wav")
-            chunk_dur = round(len(seg) / 1000, 3)
-            quality = await loop.run_in_executor(None, evaluate_segment_quality, orig_texts[i], None, None, seg)
-            await task_manager.set_chunk_audio_with_quality(task_id, i, f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
+            seg.export(str(task_dir(task_id) / chunk_filename), format="wav")
+            quality = evaluate_segment_quality(orig_texts[i], None, None, seg)
+            return i, chunk_filename, round(len(seg) / 1000, 3), quality
+
+        for i in range(len(orig_texts)):
+            await task_manager.update_chunk(task_id, i, status="processing")
+        tasks = [loop.run_in_executor(PIPER_EXECUTOR, _synth_one, i) for i in range(len(orig_texts))]
+        for coro in asyncio.as_completed(tasks):
+            i, chunk_filename, chunk_dur, quality = await coro
+            await task_manager.set_chunk_audio_with_quality(task_id, i,
+                f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
             await task_manager.recalc_progress(task_id)
 
         await _save_segments_meta(task_id)
@@ -415,7 +426,7 @@ async def regenerate_chunk(req: ChunkRegenRequest):
         loop = asyncio.get_running_loop()
         def _do(t=chunk_gen_text, vid=voice_id, pc=pause_cfg, s=spd, n_audio=na):
             return synthesize_with_pauses(piper_engine, t, vid, pc, speed=s, normalize_audio=n_audio)
-        seg = await loop.run_in_executor(None, _do)
+        seg = await loop.run_in_executor(PIPER_EXECUTOR, _do)
 
         chunk_filename = f"chunk_{req.chunk_index}.wav"
         chunk_path = task_dir(req.task_id) / chunk_filename
@@ -453,14 +464,17 @@ async def merge_chunks(req: MergeRequest):
     td = task_dir(req.task_id)
     total_dur = 0
 
-    segments = []
-    srt_lines = []
-    for idx, c in enumerate(chunks):
+    chunk_paths = []
+    for c in chunks:
         path = c["audio_path"].split("?path=")[-1]
         chunk_rel = path.split("/", 1)[-1] if "/" in path else path
-        full_path = td / chunk_rel
-        seg = await loop.run_in_executor(None, AudioSegment.from_file, str(full_path))
-        segments.append(seg)
+        chunk_paths.append(str(td / chunk_rel))
+    segments = await asyncio.gather(*[
+        loop.run_in_executor(AUDIO_IO_EXECUTOR, AudioSegment.from_file, path) for path in chunk_paths
+    ])
+
+    srt_lines = []
+    for idx, (c, seg) in enumerate(zip(chunks, segments)):
         chunk_dur = c.get("duration", round(len(seg) / 1000, 3))
 
         start_ms = int(total_dur * 1000)
@@ -477,14 +491,13 @@ async def merge_chunks(req: MergeRequest):
         srt_lines.append("")
         total_dur += chunk_dur
 
-    merged = await loop.run_in_executor(None, merge_audio_segments, segments)
+    merged = await loop.run_in_executor(AUDIO_IO_EXECUTOR, merge_audio_segments, segments)
     output_filename = f"final.{output_format}"
     output_path = td / output_filename
-    merged.export(str(output_path), format=output_format)
-
-    srt_path = td / "final.srt"
-    with open(srt_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(srt_lines))
+    def _write_outputs():
+        merged.export(str(output_path), format=output_format)
+        (td / "final.srt").write_text("\n".join(srt_lines), encoding="utf-8")
+    await loop.run_in_executor(AUDIO_IO_EXECUTOR, _write_outputs)
 
     duration = round(len(merged) / 1000, 2)
 
@@ -795,7 +808,9 @@ async def _save_dict(filename: str, key: str, value: str) -> list[dict]:
         _write_csv(filename, _get_csv_fieldnames(filename), rows)
         return rows
 
-    return await loop.run_in_executor(None, _do)
+    rows = await loop.run_in_executor(None, _do)
+    invalidate_normalizer_cache()
+    return rows
 
 
 async def _delete_dict(filename: str, key: str) -> list[dict]:
@@ -808,7 +823,9 @@ async def _delete_dict(filename: str, key: str) -> list[dict]:
         _write_csv(filename, _get_csv_fieldnames(filename), rows)
         return rows
 
-    return await loop.run_in_executor(None, _do)
+    rows = await loop.run_in_executor(None, _do)
+    invalidate_normalizer_cache()
+    return rows
 
 
 @app.get("/tts/dict/acronyms")

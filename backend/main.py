@@ -4,6 +4,7 @@ import asyncio
 import time
 import io
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,17 @@ AudioSegment.ffprobe = str(FFMPEG_DIR / "ffprobe.exe")
 os.environ["PATH"] = str(FFMPEG_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 from tts_quality_checker import evaluate_segment_quality
+
+
+def _worker_count(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+PIPER_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("PIPER_WORKERS", min(4, os.cpu_count() or 1)))
+AUDIO_IO_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("AUDIO_IO_WORKERS", 2))
 
 # ─── Resource Download ───
 
@@ -235,7 +247,7 @@ async def _download_resource(rid: str):
 from tts_engine import (
     PiperEngine, F5Engine, OmniVoiceEngine, TaskManager,
     chunk_text_sentences, merge_audio_segments,
-    normalize_vietnamese, clean_text,
+    normalize_vietnamese, invalidate_normalizer_cache, clean_text,
     _chunk_hybrid, get_chunk_config,
 )
 
@@ -650,7 +662,7 @@ async def preview_tts(req: TTSRequest):
             async with gpu_lock:
                 audio = await loop.run_in_executor(None, _do)
         else:
-            audio = await loop.run_in_executor(None, _do)
+            audio = await loop.run_in_executor(PIPER_EXECUTOR, _do)
     except ValueError as e:
         raise HTTPException(404, str(e))
 
@@ -792,7 +804,7 @@ async def _run_generation(task_id: str):
                 quality = evaluate_segment_quality(orig_texts[i], None, None, seg)
                 return i, chunk_filename, chunk_dur, quality
 
-            tasks = [loop.run_in_executor(None, _synth_one, i) for i in range(len(orig_texts))]
+            tasks = [loop.run_in_executor(PIPER_EXECUTOR, _synth_one, i) for i in range(len(orig_texts))]
             for coro in asyncio.as_completed(tasks):
                 i, chunk_filename, chunk_dur, quality = await coro
                 await task_manager.update_chunk(task_id, i, status="processing")
@@ -801,6 +813,7 @@ async def _run_generation(task_id: str):
                 await task_manager.recalc_progress(task_id)
         else:
             # GPU engines: serial with lock, inference only under lock
+            postprocess_tasks = []
             for i in range(len(orig_texts)):
                 await task_manager.update_chunk(task_id, i, status="processing")
                 await task_manager.recalc_progress(task_id)
@@ -843,12 +856,20 @@ async def _run_generation(task_id: str):
                 if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
                     seg = AudioSegment.silent(duration=int(lb_pause * 1000)) + seg
 
-                chunk_filename = f"chunk_{i}.wav"
-                chunk_path = td / chunk_filename
-                seg.export(str(chunk_path), format="wav")
-                chunk_dur = round(len(seg) / 1000, 3)
-                quality = await loop.run_in_executor(None, evaluate_segment_quality, orig_texts[i], None, None, seg)
-                await task_manager.set_chunk_audio_with_quality(task_id, i, f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
+                def _postprocess(chunk_index=i, audio=seg):
+                    chunk_filename = f"chunk_{chunk_index}.wav"
+                    audio.export(str(td / chunk_filename), format="wav")
+                    quality = evaluate_segment_quality(orig_texts[chunk_index], None, None, audio)
+                    return chunk_index, chunk_filename, round(len(audio) / 1000, 3), quality
+
+                # While a prior WAV is written and checked, begin the next GPU
+                # inference. The executor is bounded to protect disk throughput.
+                postprocess_tasks.append(loop.run_in_executor(AUDIO_IO_EXECUTOR, _postprocess))
+
+            for coro in asyncio.as_completed(postprocess_tasks):
+                i, chunk_filename, chunk_dur, quality = await coro
+                await task_manager.set_chunk_audio_with_quality(task_id, i,
+                    f"/tts/download_file?path={task_id}/{chunk_filename}", duration=chunk_dur, quality=quality)
                 await task_manager.recalc_progress(task_id)
 
         print(f"[TTS] synth total={time.time()-t_synth:.2f}s engine={engine_type} chunks={len(orig_texts)} chars={len(text)}")
@@ -942,7 +963,7 @@ async def regenerate_chunk(req: ChunkRegenRequest):
             async with gpu_lock:
                 seg = await loop.run_in_executor(None, _do)
         else:
-            seg = await loop.run_in_executor(None, _do)
+            seg = await loop.run_in_executor(PIPER_EXECUTOR, _do)
 
         chunk_filename = f"chunk_{req.chunk_index}.wav"
         chunk_path = task_dir(req.task_id) / chunk_filename
@@ -982,19 +1003,22 @@ async def merge_chunks(req: MergeRequest):
     td = task_dir(req.task_id)
     total_dur = 0
 
-    segments = []
-    srt_lines = []
-    for idx, c in enumerate(chunks):
+    def _load_post(filepath):
+        seg = AudioSegment.from_file(filepath)
+        s = seg.strip_silence(silence_len=100, silence_thresh=-50)
+        return s.fade_in(8).fade_out(12)
+
+    chunk_paths = []
+    for c in chunks:
         path = c["audio_path"].split("?path=")[-1]
         chunk_rel = path.split("/", 1)[-1] if "/" in path else path
-        full_path = td / chunk_rel
+        chunk_paths.append(str(td / chunk_rel))
+    segments = await asyncio.gather(*[
+        loop.run_in_executor(AUDIO_IO_EXECUTOR, _load_post, path) for path in chunk_paths
+    ])
 
-        def _load_post(filepath):
-            seg = AudioSegment.from_file(filepath)
-            s = seg.strip_silence(silence_len=100, silence_thresh=-50)
-            return s.fade_in(8).fade_out(12)
-        seg = await loop.run_in_executor(None, _load_post, str(full_path))
-        segments.append(seg)
+    srt_lines = []
+    for idx, (c, seg) in enumerate(zip(chunks, segments)):
         chunk_dur = c.get("duration", round(len(seg) / 1000, 3))
 
         start_ms = int(total_dur * 1000)
@@ -1018,15 +1042,14 @@ async def merge_chunks(req: MergeRequest):
             segs = [s.apply_gain(avg_db - s.dBFS) for s in segs]
         merged = merge_audio_segments(segs)
         return merged.compress_dynamic_range(threshold=-20, ratio=2.0, attack=5, release=50)
-    merged = await loop.run_in_executor(None, _finalize, segments)
+    merged = await loop.run_in_executor(AUDIO_IO_EXECUTOR, _finalize, segments)
 
     output_filename = f"final.{output_format}"
     output_path = td / output_filename
-    merged.export(str(output_path), format=output_format, bitrate="320k")
-
-    srt_path = td / "final.srt"
-    with open(srt_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(srt_lines))
+    def _write_outputs():
+        merged.export(str(output_path), format=output_format, bitrate="320k")
+        (td / "final.srt").write_text("\n".join(srt_lines), encoding="utf-8")
+    await loop.run_in_executor(AUDIO_IO_EXECUTOR, _write_outputs)
 
     duration = round(len(merged) / 1000, 2)
 
@@ -1310,7 +1333,9 @@ async def _save_dict(filename: str, key: str, value: str) -> list[dict]:
         _write_csv(filename, _get_csv_fieldnames(filename), rows)
         return rows
 
-    return await loop.run_in_executor(None, _do)
+    rows = await loop.run_in_executor(None, _do)
+    invalidate_normalizer_cache()
+    return rows
 
 
 async def _delete_dict(filename: str, key: str) -> list[dict]:
@@ -1323,7 +1348,9 @@ async def _delete_dict(filename: str, key: str) -> list[dict]:
         _write_csv(filename, _get_csv_fieldnames(filename), rows)
         return rows
 
-    return await loop.run_in_executor(None, _do)
+    rows = await loop.run_in_executor(None, _do)
+    invalidate_normalizer_cache()
+    return rows
 
 
 @app.get("/tts/dict/acronyms")

@@ -76,10 +76,43 @@ const segmentFilters = document.getElementById('segmentFilters');
 const batchActions = document.getElementById('batchActions');
 const autosaveIndicator = document.getElementById('autosaveIndicator');
 const autosaveText = document.getElementById('autosaveText');
+let progressPopupActive = false;
+
+function removeMiniPlayer() {
+	const player = document.getElementById('chunkPlayer');
+	if (!player) return;
+	const audio = player.querySelector('audio');
+	if (audio) audio.pause();
+	player.remove();
+}
+
+function showProgressPopup() {
+	progressPopupActive = true;
+	removeMiniPlayer();
+	hideFinalAudio();
+	progressFloat.classList.add('visible');
+}
+
+function hideProgressPopup() {
+	progressPopupActive = false;
+	progressFloat.classList.remove('visible');
+}
+
+function prepareMiniPlayer() {
+	progressFloat.classList.remove('visible');
+	hideFinalAudio();
+}
+
+function closeMiniPlayer(player) {
+	const audio = player.querySelector('audio');
+	if (audio) audio.pause();
+	player.remove();
+	if (progressPopupActive) progressFloat.classList.add('visible');
+}
 
 function showFinalAudio() {
-	const mp = document.getElementById('chunkPlayer');
-	if (mp) mp.remove();
+	removeMiniPlayer();
+	hideProgressPopup();
 	finalAudioBar.classList.add('visible');
 	finalAudioOverlay.classList.add('visible');
 	reopenFinalBtn.classList.remove('visible');
@@ -760,19 +793,19 @@ function previewVoice(mode, id) {
 }
 
 function getOrCreateMiniPlayer() {
+	prepareMiniPlayer();
 	const old = document.getElementById('chunkPlayer');
 	if (old) return old;
 	const wrap = document.createElement('div');
 	wrap.id = 'chunkPlayer';
-	const hasProgress = progressFloat.classList.contains('visible');
-	wrap.style.cssText = `position:fixed;bottom:${hasProgress ? '100px' : '24px'};left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;`;
+	wrap.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;';
 	const aud = document.createElement('audio');
 	aud.controls = true;
 	aud.style.cssText = 'height:34px;width:280px;';
 	const close = document.createElement('button');
 	close.innerHTML = '&times;';
 	close.style.cssText = 'border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-muted);padding:0 4px;line-height:1;';
-	close.onclick = () => wrap.remove();
+	close.onclick = () => closeMiniPlayer(wrap);
 	wrap.appendChild(aud);
 	wrap.appendChild(close);
 	document.body.appendChild(wrap);
@@ -843,7 +876,7 @@ async function startGeneration() {
 
 	hideError();
 	hideFinalAudio();
-	progressFloat.classList.add('visible');
+	showProgressPopup();
 	mergeSection.classList.add('hidden');
 	resetBtn.style.display = 'inline-flex';
 	generateBtn.disabled = true;
@@ -893,17 +926,25 @@ async function startGeneration() {
 
 function pollStatus(taskId, fileRef) {
 	if (POLL_INTERVAL) clearInterval(POLL_INTERVAL);
+	let requestInFlight = false;
+	let lastChunkSignature = '';
 	POLL_INTERVAL = setInterval(async () => {
+		if (requestInFlight) return;
+		requestInFlight = true;
 		try {
 			const res = await fetch(`${API_BASE}/tts/status/${taskId}`);
 			if (!res.ok) throw new Error('Status fetch failed');
 			const data = await res.json();
 			setProgress(data.progress, data.stage || '');
-			renderChunks(data.chunks || []);
+			const chunks = data.chunks || [];
+			const signature = chunks.map(c => [c.index, c.status, c.audio_url, c.duration, c.warning, c.error, c.text, c.voice_id].join('|')).join('~');
+			if (signature !== lastChunkSignature) {
+				lastChunkSignature = signature;
+				renderChunks(chunks);
+			}
 
 			if (data.status === 'chunks_done') {
 				clearInterval(POLL_INTERVAL); POLL_INTERVAL = null;
-				const chunks = data.chunks || [];
 				if (chunks.length > 1) {
 					// Auto-merge multi-segment results
 					try {
@@ -930,7 +971,7 @@ function pollStatus(taskId, fileRef) {
 				if (data.status === 'done') {
 					renderChunks(data.chunks || []);
 					if (chunks.length > 1) mergeSection.classList.remove('hidden');
-					progressFloat.classList.remove('visible');
+					hideProgressPopup();
 					showFinalAudio();
 					CURRENT_AUDIO_URL = `${API_BASE}${data.audio_url}`;
 					loadAudio(CURRENT_AUDIO_URL);
@@ -946,7 +987,7 @@ function pollStatus(taskId, fileRef) {
 					fileRef.duration = data.duration || fileRef.duration;
 					renderFileQueue();
 				}
-				progressFloat.classList.remove('visible');
+				hideProgressPopup();
 				showFinalAudio();
 				CURRENT_AUDIO_URL = `${API_BASE}${data.audio_url}`;
 				loadAudio(CURRENT_AUDIO_URL);
@@ -963,6 +1004,8 @@ function pollStatus(taskId, fileRef) {
 		} catch (e) {
 			clearInterval(POLL_INTERVAL); POLL_INTERVAL = null;
 			onError(e.message);
+		} finally {
+			requestInFlight = false;
 		}
 	}, 500);
 }
@@ -970,7 +1013,7 @@ function pollStatus(taskId, fileRef) {
 function onChunksDone(data) {
 	STATE = 'chunks_done';
 	generateBtn.disabled = false;
-	progressFloat.classList.remove('visible');
+	hideProgressPopup();
 	const chunks = data.chunks || [];
 	if (chunks.length > 1) {
 		mergeSection.classList.remove('hidden');
@@ -1209,18 +1252,18 @@ function loadAudio(url) {
 function onError(msg) {
 	STATE = 'error';
 	generateBtn.disabled = false;
-	progressFloat.classList.remove('visible');
+	hideProgressPopup();
 	showError(msg);
 }
 
 mergeBtn.addEventListener('click', async () => {
 	if (!CURRENT_TASK_ID) return;
 	mergeBtn.disabled = true; mergeBtn.textContent = 'Merging...';
-	progressFloat.classList.add('visible');
+	showProgressPopup();
 	setProgress(90, 'Merging audio...');
 	await doMerge();
 	mergeBtn.disabled = false; mergeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><path d="M8 6L21 6"/><path d="M8 12L21 12"/><path d="M8 18L21 18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Merge &amp; Download All';
-	progressFloat.classList.remove('visible');
+	hideProgressPopup();
 });
 
 document.getElementById('downloadAllBtn').addEventListener('click', () => {
@@ -1262,7 +1305,7 @@ resetBtn.addEventListener('click', async () => {
 	if (POLL_INTERVAL) { clearInterval(POLL_INTERVAL); POLL_INTERVAL = null; }
 	STATE = 'idle';
 	generateBtn.disabled = false;
-	progressFloat.classList.remove('visible');
+	hideProgressPopup();
 	hideFinalAudio();
 	reopenFinalBtn.classList.remove('visible');
 	mergeSection.classList.add('hidden');
@@ -1281,7 +1324,7 @@ floatCancelBtn.addEventListener('click', async () => {
 	CURRENT_TASK_ID = null;
 	STATE = 'idle';
 	generateBtn.disabled = false;
-	progressFloat.classList.remove('visible');
+	hideProgressPopup();
 	resetBtn.style.display = 'none';
 	showToast('Generation cancelled');
 });
@@ -1425,8 +1468,8 @@ async function loadHistory() {
 
 function playHistory(id) {
 	const url = `${API_BASE}/tts/download_file?path=${id}/final.mp3`;
-	const old = document.getElementById('chunkPlayer');
-	if (old) old.remove();
+	prepareMiniPlayer();
+	removeMiniPlayer();
 	const wrap = document.createElement('div');
 	wrap.id = 'chunkPlayer';
 	wrap.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;';
@@ -1437,7 +1480,7 @@ function playHistory(id) {
 	const close = document.createElement('button');
 	close.innerHTML = '&times;';
 	close.style.cssText = 'border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-muted);padding:0 4px;line-height:1;';
-	close.onclick = () => wrap.remove();
+	close.onclick = () => closeMiniPlayer(wrap);
 	wrap.appendChild(aud);
 	wrap.appendChild(close);
 	document.body.appendChild(wrap);
@@ -1824,12 +1867,11 @@ function updateChunkVoice(index, voiceId) {
 function playChunk(index) {
 	const c = CHUNK_DATA.find(x => x.index === index);
 	if (!c || !c.audio_url) return;
-	const old = document.getElementById('chunkPlayer');
-	if (old) old.remove();
+	prepareMiniPlayer();
+	removeMiniPlayer();
 	const wrap = document.createElement('div');
 	wrap.id = 'chunkPlayer';
-	const hasProgress = progressFloat.classList.contains('visible');
-	wrap.style.cssText = `position:fixed;bottom:${hasProgress ? '100px' : '24px'};left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;`;
+	wrap.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:10px 18px;box-shadow:var(--shadow-lg);z-index:300;display:flex;align-items:center;gap:12px;';
 	const label = document.createElement('span');
 	label.style.cssText = 'font-size:13px;color:var(--text-primary);white-space:nowrap;font-weight:600;';
 	label.textContent = 'Segment ' + (index + 1) + ':';
@@ -1840,7 +1882,7 @@ function playChunk(index) {
 	const close = document.createElement('button');
 	close.innerHTML = '&times;';
 	close.style.cssText = 'border:none;background:none;font-size:22px;cursor:pointer;color:var(--text-muted);padding:0 4px;line-height:1;';
-	close.onclick = () => wrap.remove();
+	close.onclick = () => closeMiniPlayer(wrap);
 	wrap.appendChild(label);
 	wrap.appendChild(aud);
 	wrap.appendChild(close);
