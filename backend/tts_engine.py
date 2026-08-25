@@ -292,11 +292,8 @@ class PiperEngine:
         return meta
 
     def _config_path(self, model_path: Path) -> Path | None:
-        """Use a per-model sidecar when present, otherwise shared config.json."""
-        sidecar = model_path.with_suffix(".onnx.json")
+        """Use the single shared Piper config for every ONNX voice."""
         shared = self._models_dir / "config.json"
-        if sidecar.exists():
-            return sidecar
         if shared.exists():
             return shared
         return None

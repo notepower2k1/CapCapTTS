@@ -617,10 +617,11 @@ _dl_lock = asyncio.Lock()
 HF_URL = "https://huggingface.co/{repo}/resolve/main/{path}"
 
 _PIPER_VOICES = [
-    "banmai", "chieuthanh", "cuc", "duyoryx3175", "lacphi",
-    "maiphuong", "manhdung", "minhkhang", "minhquang",
-    "ngochuyen", "ngochuyennew", "phuongtrang", "taian2",
-    "vi_VN-vais1000-medium",
+    "adam1", "banmai", "chieuthanh", "cuc", "duyoryx3175", "lacphi",
+    "maiphuong", "manhdung", "minhkhang", "minhquang", "minhthu",
+    "mytam2", "mytam2794", "ngochuyen", "ngochuyennew", "ngocngan3701",
+    "phuongtrang", "taian2", "taian4", "thanhphuong2", "thientam",
+    "tranthanh3870", "vi_VN-vais1000-medium", "vietthao3886", "yannew",
 ]
 
 _RESOURCE_DEFS = [
@@ -628,14 +629,14 @@ _RESOURCE_DEFS = [
         "id": "piper",
         "label": "Piper Voices (Low · CPU)",
         "repo_id": "Hacht/CapCapResource",
-        "files": ["piper/voices.json"] + [f"piper/{v}{e}" for v in _PIPER_VOICES for e in [".onnx", ".onnx.json"]],
+        "files": ["piper-new/voices.json", "piper-new/config.json"] + [f"piper-new/{v}.onnx" for v in _PIPER_VOICES],
         "local_dir": str(PIPER_DIR),
     },
 ]
 
 def _local_path(local_dir: Path, repo_path: str) -> Path:
     parts = Path(repo_path).parts
-    if parts[0] in ("piper", "f5_voice"):
+    if parts[0] in ("piper", "piper-new", "f5_voice"):
         return local_dir / Path(*parts[1:])
     return local_dir / Path(repo_path)
 
