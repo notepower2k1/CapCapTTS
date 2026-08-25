@@ -1,3 +1,4 @@
+# CPU-only backend. No torch, torchaudio, F5-TTS, OmniVoice, or CUDA packages.
 fastapi>=0.100.0
 uvicorn>=0.20.0
 pydub>=0.25.0

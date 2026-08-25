@@ -18,7 +18,7 @@ import sys
 
 import json
 
-from config import OUTPUT_DIR, PIPER_DIR, F5_VOICES_DIR, F5_RESOURCE_DIR, OMNIVOICE_MODEL_DIR, MAX_TEXT_LENGTH, FFMPEG_DIR
+from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, F5_VOICES_DIR, F5_RESOURCE_DIR, OMNIVOICE_MODEL_DIR, MAX_TEXT_LENGTH, FFMPEG_DIR
 
 AudioSegment.converter = str(FFMPEG_DIR / "ffmpeg.exe")
 AudioSegment.ffprobe = str(FFMPEG_DIR / "ffprobe.exe")
@@ -286,7 +286,7 @@ def _synthesize_one(piper_engine, f5_engine, omnivoice_engine, engine_type: str,
 
 # ─── Pause config ───
 
-PAUSE_FILE = Path(__file__).resolve().parent / "custom_dict" / "_pause.json"
+PAUSE_FILE = CUSTOM_DICT_DIR / "_pause.json"
 PAUSE_DEFAULTS = {"enabled": True, "pauses": {".": 0.4, ",": 0.2, ";": 0.3, ":": 0.3, "?": 0.4, "!": 0.4, "linebreak": 0.6}}
 
 def _merge_pause_config(cfg: dict) -> dict:
@@ -589,6 +589,7 @@ async def model_status():
         recommended_quality = ["low", "medium", "high"]
 
     return {
+        "mode": "gpu",
         "gpu": gpu_info,
         "recommended_quality": recommended_quality,
         "f5": dict(_load_state["f5"]),
@@ -1273,7 +1274,6 @@ async def update_voice(voice_id: str, req: VoiceUpdateRequest):
 
 # ─── Dictionary ───
 
-CUSTOM_DICT_DIR = Path(__file__).resolve().parent / "custom_dict"
 CUSTOM_DICT_DIR.mkdir(parents=True, exist_ok=True)
 
 class DictEntry(BaseModel):
@@ -1408,7 +1408,7 @@ async def save_pause_config(body: PauseConfigBody):
 
 # ─── History ───
 
-HISTORY_FILE = Path(__file__).resolve().parent / "custom_dict" / "_history.json"
+HISTORY_FILE = CUSTOM_DICT_DIR / "_history.json"
 MAX_HISTORY = 30
 
 

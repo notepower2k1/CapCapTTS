@@ -30,6 +30,7 @@ let AUTOSAVE_TIMER = null;
 let CHUNK_PAGE = 0;
 let _expandedChunks = new Set();
 const CHUNK_PER_PAGE = 10;
+let APP_MODE = 'gpu';
 let CURRENT_VOICE_MODE = 'low';
 let CURRENT_VOICE_ID = 'banmai';
 let ALL_VOICES = { low: [], medium: [], high: [] };
@@ -38,6 +39,45 @@ let PAUSE_CFG = { enabled: true, pauses: { '.': 0.4, ',': 0.2, ';': 0.3, ':': 0.
 
 const QUALITY_LABELS = { low: 'Piper', medium: 'F5', high: 'OmniVoice' };
 const QUALITY_BADGE_CLASS = { low: 'piper', medium: 'f5', high: 'omnivoice' };
+
+function applyAppMode(data) {
+	const mode = data && data.mode ? String(data.mode).toLowerCase() : ((data && data.gpu && data.gpu.available) ? 'gpu' : 'cpu');
+	APP_MODE = mode === 'cpu' ? 'cpu' : 'gpu';
+	document.body.classList.toggle('cpu-mode', APP_MODE === 'cpu');
+
+	if (APP_MODE === 'cpu') {
+		CURRENT_VOICE_MODE = 'low';
+		document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(btn => {
+			btn.classList.toggle('active', btn.dataset.mode === 'low');
+		});
+		document.querySelectorAll('#voiceModal .dict-tab').forEach(tab => {
+			tab.classList.toggle('active', tab.dataset.tab === 'low');
+		});
+		const modelsTab = document.querySelector('#resourceModal .dict-tab[data-rtab="models"]');
+		if (modelsTab) modelsTab.classList.remove('active');
+		const downloadTab = document.querySelector('#resourceModal .dict-tab[data-rtab="download"]');
+		if (downloadTab) downloadTab.classList.add('active');
+		const modelsPanel = document.getElementById('resourceModelsTab');
+		if (modelsPanel) modelsPanel.classList.add('hidden');
+		const downloadPanel = document.getElementById('resourceDownloadTab');
+		if (downloadPanel) downloadPanel.classList.remove('hidden');
+	}
+
+	updateModelConfig();
+}
+
+async function loadAppMode() {
+	try {
+		const res = await fetch(`${API_BASE}/tts/model_status`);
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		applyAppMode(data);
+		return data;
+	} catch (e) {
+		console.warn('Could not determine backend mode:', e);
+		return null;
+	}
+}
 
 const textInput = document.getElementById('textInput');
 const dropZone = document.getElementById('dropZone');
@@ -178,7 +218,7 @@ function _updateGenIndicator() {
 function _saveFileConfig(idx) {
 	const f = FILE_QUEUE[idx];
 	if (!f) return;
-	const mode = document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low';
+	const mode = APP_MODE === 'cpu' ? 'low' : (document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 	f.config = {
 		voice_mode: mode,
 		voice_id: CURRENT_VOICE_ID,
@@ -250,7 +290,7 @@ function _loadFileToEditor(idx) {
 	textInput.dispatchEvent(new Event('input'));
 	if (f.config) {
 		const c = f.config;
-		const mode = c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low';
+		const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 		document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 		CURRENT_VOICE_MODE = mode;
 		if (c.voice_id) CURRENT_VOICE_ID = c.voice_id;
@@ -326,7 +366,7 @@ async function processSingleFile(idx) {
 	f.status = 'processing'; renderFileQueue();
 	try {
 		const c = f.config || {};
-		const mode = c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low';
+		const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 		const vid = c.voice_id || CURRENT_VOICE_ID || 'banmai';
 		f.voice = (ALL_VOICES[mode] || []).find(v => v.id === vid)?.label || vid;
 		const res = await fetch(`${API_BASE}/tts/generate`, {
@@ -476,6 +516,7 @@ voiceModeToggle.addEventListener('click', e => {
 	const btn = e.target.closest('.toggle-btn');
 	if (!btn) return;
 	const mode = btn.dataset.mode;
+	if (APP_MODE === 'cpu' && mode !== 'low') return;
 	const list = ALL_VOICES[mode] || [];
 	if (list.length === 0) {
 		const names = { medium: 'F5-TTS', high: 'OmniVoice' };
@@ -558,8 +599,16 @@ async function checkGpuAndShowInfo() {
 	try {
 		const res = await fetch(`${API_BASE}/tts/model_status`);
 		const data = await res.json();
+		applyAppMode(data);
 		const gpu = data.gpu || {};
 		const badge = document.getElementById('gpuBadge');
+		if (!badge || APP_MODE === 'cpu') {
+			if (badge) {
+				badge.textContent = '';
+				badge.style.display = 'none';
+			}
+			return;
+		}
 		if (gpu.available) {
 			const labels = { low: 'CPU', medium: 'GPU', high: 'GPU' };
 			const rec = (data.recommended_quality || ['low']).map(q => labels[q] || q).join('/');
@@ -670,6 +719,7 @@ function updateCharCount() {
 
 /* Voice Modal */
 function switchVoiceTab(tab) {
+	if (APP_MODE === 'cpu' && tab !== 'low') tab = 'low';
 	document.querySelectorAll('#voiceModal .dict-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
 	document.getElementById('voiceLowList').classList.toggle('hidden', tab !== 'low');
 	document.getElementById('voiceMediumList').classList.toggle('hidden', tab !== 'medium');
@@ -721,6 +771,7 @@ function renderVoiceList(mode) {
 }
 
 function selectVoiceFromCard(mode, id) {
+	if (APP_MODE === 'cpu' && mode !== 'low') return;
 	const list = ALL_VOICES[mode] || [];
 	const v = list.find(x => x.id === id);
 	if (v) {
@@ -886,7 +937,7 @@ async function startGeneration() {
 
 	const text = selFile ? selFile.text : textInput.value.trim();
 	const c = selFile?.config || {};
-	const mode = c.voice_mode || CURRENT_VOICE_MODE;
+	const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || CURRENT_VOICE_MODE);
 	const vid = c.voice_id || CURRENT_VOICE_ID;
 
 	if (selFile) {
@@ -2153,6 +2204,10 @@ function renderDownloadTab(catalog, dlState) {
 
 async function loadModelsTab() {
 	const container = document.getElementById('resourceModelsTab');
+	if (APP_MODE === 'cpu') {
+		container.innerHTML = '';
+		return;
+	}
 	container.innerHTML = '<div class="no-chunks" style="padding:20px;">Loading...</div>';
 	try {
 		const res = await fetch(`${API_BASE}/tts/model_status`);
@@ -2165,6 +2220,10 @@ async function loadModelsTab() {
 
 function renderModelsTab(ms) {
 	const container = document.getElementById('resourceModelsTab');
+	if (APP_MODE === 'cpu' || (ms && ms.mode === 'cpu')) {
+		container.innerHTML = '';
+		return;
+	}
 	const engines = [
 		{ key: 'f5', label: 'F5-TTS (Medium · GPU)', state: (ms && ms.f5) || {} },
 		{ key: 'omnivoice', label: 'OmniVoice (High · GPU)', state: (ms && ms.omnivoice) || {} },
@@ -2205,6 +2264,7 @@ function renderModelsTab(ms) {
 // ─── Tab Switching ───
 
 function switchResourceTab(tab) {
+	if (APP_MODE === 'cpu' && tab === 'models') tab = 'download';
 	document.querySelectorAll('#resourceModal .dict-tab').forEach(b => b.classList.toggle('active', b.dataset.rtab === tab));
 	document.getElementById('resourceDownloadTab').classList.toggle('hidden', tab !== 'download');
 	document.getElementById('resourceModelsTab').classList.toggle('hidden', tab !== 'models');
@@ -2256,6 +2316,7 @@ function stopDownloadPoll() {
 // ─── Model Load ───
 
 async function loadModel(model) {
+	if (APP_MODE === 'cpu') return;
 	try {
 		const res = await fetch(`${API_BASE}/tts/load_model`, {
 			method: 'POST',
@@ -2276,6 +2337,7 @@ async function loadModel(model) {
 }
 
 function startModelPoll() {
+	if (APP_MODE === 'cpu') return;
 	stopModelPoll();
 	RESOURCE_POLL = setInterval(async () => {
 		try {
@@ -2304,7 +2366,7 @@ async function openResourceModal() {
 	document.getElementById('resourceModal').classList.remove('hidden');
 	// Activate download tab by default
 	const active = document.querySelector('#resourceModal .dict-tab.active');
-	switchResourceTab(active ? active.dataset.rtab : 'download');
+	switchResourceTab(APP_MODE === 'cpu' ? 'download' : (active ? active.dataset.rtab : 'download'));
 }
 
 document.getElementById('resourceBtn').addEventListener('click', openResourceModal);
@@ -2362,5 +2424,6 @@ document.addEventListener('keydown', e => {
 	}
 });
 
-updateCharCount(); updateSplitCheckbox(); updateModelConfig(); loadVoices();
+updateCharCount(); updateSplitCheckbox(); updateModelConfig();
+loadAppMode().finally(() => loadVoices());
 fetch(`${API_BASE}/tts/pause_config`).then(r => r.json()).then(c => { PAUSE_CFG = c; updateCharCount(); }).catch(() => { });

@@ -40,6 +40,7 @@ from config import (
     PIPER_DIR, F5_MODEL_DIR, F5_VOICES_DIR, F5_VOCODER_DIR,
     FFMPEG_DIR, OUTPUT_DIR, PIPER_SAMPLE_RATE, F5_SAMPLE_RATE,
     CROSS_FADE_MS, OMNIVOICE_VOICES_DIR, OMNIVOICE_MODEL_DIR,
+    CUSTOM_DICT_DIR,
 )
 
 AudioSegment.converter = str(FFMPEG_DIR / "ffmpeg.exe")
@@ -59,7 +60,7 @@ def normalize_vietnamese(text: str) -> str:
         from pathlib import Path
         import csv, shutil
 
-        custom_dir = Path(__file__).resolve().parent / "custom_dict"
+        custom_dir = CUSTOM_DICT_DIR
         combined_dir = custom_dir / "_combined"
         combined_dir.mkdir(parents=True, exist_ok=True)
 
@@ -290,12 +291,21 @@ class PiperEngine:
                 pass
         return meta
 
+    def _config_path(self, model_path: Path) -> Path | None:
+        """Use a per-model sidecar when present, otherwise shared config.json."""
+        sidecar = model_path.with_suffix(".onnx.json")
+        shared = self._models_dir / "config.json"
+        if sidecar.exists():
+            return sidecar
+        if shared.exists():
+            return shared
+        return None
+
     def list_voices(self, include_rate=False) -> list[dict]:
         voices = []
         for f in sorted(self._models_dir.glob("*.onnx")):
             voice_id = f.stem
-            config_path = f.with_suffix(".onnx.json")
-            if config_path.exists():
+            if self._config_path(f):
                 m = self._meta.get(voice_id, {})
                 label = m.get("name", voice_id.replace("_", " ").title())
                 v = {"id": voice_id, "label": label, "engine": "piper", "gender": m.get("gender", ""), "description": m.get("description", "")}
@@ -308,8 +318,8 @@ class PiperEngine:
         if voice_id in self._voices:
             return self._voices[voice_id]
         onnx_path = self._models_dir / f"{voice_id}.onnx"
-        json_path = self._models_dir / f"{voice_id}.onnx.json"
-        if not onnx_path.exists() or not json_path.exists():
+        json_path = self._config_path(onnx_path)
+        if not onnx_path.exists() or not json_path:
             raise ValueError(f"Voice '{voice_id}' not found")
         session = onnxruntime.InferenceSession(str(onnx_path))
         with open(json_path, encoding="utf-8") as f:

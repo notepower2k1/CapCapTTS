@@ -164,17 +164,55 @@ If using the GPU version with F5-TTS:
 
 ## Quick Start
 
-### Portable Mode (No Python Install Needed)
+### Electron Desktop App (CPU or GPU)
+
+Install the desktop dependencies once:
+
+```bash
+npm install
+```
+
+Run either mode during development:
+
+```bash
+npm run start:cpu   # Piper + ONNX Runtime CPU only
+npm run start:gpu   # Piper + F5-TTS + OmniVoice
+```
+
+Create Windows installers:
+
+```bash
+npm run build:cpu
+npm run build:gpu
+```
+
+Electron starts the matching FastAPI backend on a free local port, opens the
+existing frontend, and stops the backend when the window closes. The CPU
+backend intentionally has no PyTorch/CUDA dependency. The installer does not
+bundle the full Python environment: it embeds a small base Python runtime, then
+downloads the matching CPU/GPU dependencies into the user's local app-data
+folder on first launch and reuses them later. Internet access is required for
+this first run.
+
+### Manual Portable Environment (Optional)
+
+For maintainers who want to rebuild the installers, prepare the small embedded
+Python archive after creating the CPU portable environment:
+
+```bash
+setup_portable.bat cpu
+npm run prepare:runtime
+```
 
 ```bash
 setup_portable.bat cpu      # Download portable Python + deps
-run_api_cpu_portable.bat    # Start server
+npm run start:cpu            # Start CPU Electron app
 ```
 
 Or for GPU:
 ```bash
 setup_portable.bat gpu
-run_api_gpu_portable.bat
+npm run start:gpu
 ```
 
 ### GPU Version (Piper + F5-TTS + OmniVoice)
@@ -185,8 +223,6 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Or double-click `run_api.bat`
-
 ### CPU-Only Version (Piper only)
 
 ```bash
@@ -195,9 +231,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Or double-click `run_api_cpu.bat`
-
-Open http://localhost:8000 in your browser.
+Open http://localhost:8000 in your browser, or use the Electron app above.
 
 ## Configuration
 
@@ -233,7 +267,8 @@ If you see a warning about ffmpeg not found, update `FFMPEG_DIR` in `config.py`.
 
 By default the server binds to `0.0.0.0` — accessible from your local network.
 
-To restrict to localhost only, change `host="0.0.0.0"` to `host="127.0.0.1"` in `main.py` and `run_api.bat`.
+The Electron app already binds its backend to localhost. For a manually
+started server, change `host="0.0.0.0"` to `host="127.0.0.1"` in `main.py`.
 
 To allow LAN access on Windows, open the firewall port:
 ```cmd
@@ -268,16 +303,13 @@ TTS/
 │   ├── style.css         # Styles
 │   ├── capcap.png        # Logo
 │   └── jszip.min.js      # ZIP export library
-├── run_api.bat           # Launch GPU version
-├── run_api_cpu.bat       # Launch CPU version
-├── run_api_gpu_portable.bat  # Launch GPU with portable Python
-├── run_api_cpu_portable.bat  # Launch CPU with portable Python
 ├── setup_portable.bat    # Setup portable Python (no install needed)
-├── build_gpu.bat         # Build GPU .exe with PyInstaller
-├── build_cpu.bat         # Build CPU .exe with PyInstaller
 ├── screenshot.png        # UI screenshot
 └── README.md
 ```
+
+The Electron desktop files are `electron/`, `package.json`,
+`electron-builder.cpu.cjs`, and `electron-builder.gpu.cjs`.
 
 ## API Endpoints
 

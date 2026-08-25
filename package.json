@@ -1,0 +1,20 @@
+{
+  "name": "capcap-tts",
+  "version": "1.0.0",
+  "description": "Local Vietnamese text-to-speech desktop app",
+  "author": "CapCap TTS",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron . --mode=gpu",
+    "start:cpu": "electron . --mode=cpu",
+    "start:gpu": "electron . --mode=gpu",
+    "prepare:runtime": "node scripts/prepare-runtime.cjs",
+    "build:cpu": "electron-builder --config electron-builder.cpu.cjs",
+    "build:gpu": "electron-builder --config electron-builder.gpu.cjs"
+  },
+  "devDependencies": {
+    "electron": "^36.3.1",
+    "electron-builder": "^26.0.12"
+  }
+}

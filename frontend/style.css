@@ -1677,6 +1677,19 @@ textarea::placeholder {
 	display: none !important;
 }
 
+/* GPU-only controls are removed from the CPU build after the backend mode is known. */
+[data-cpu-only] {
+	display: none !important;
+}
+
+body.cpu-mode [data-gpu-only] {
+	display: none !important;
+}
+
+body.cpu-mode [data-cpu-only] {
+	display: block !important;
+}
+
 /* Advanced panel */
 .adv-toggle {
 	font-size: 12px;

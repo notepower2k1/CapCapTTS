@@ -22,7 +22,7 @@ import aiohttp
 import aiofiles
 from huggingface_hub import HfApi
 
-from config import OUTPUT_DIR, PIPER_DIR, MAX_TEXT_LENGTH
+from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, MAX_TEXT_LENGTH
 from tts_quality_checker import evaluate_segment_quality
 from tts_engine import (
     PiperEngine, TaskManager,
@@ -53,7 +53,7 @@ def _synthesize_one(piper_engine, text: str, voice_id: str, speed: float = 1.0, 
     return audio
 
 
-PAUSE_FILE = Path(__file__).resolve().parent / "custom_dict" / "_pause.json"
+PAUSE_FILE = CUSTOM_DICT_DIR / "_pause.json"
 PAUSE_DEFAULTS = {"enabled": True, "pauses": {".": 0.4, ",": 0.2, ";": 0.3, ":": 0.3, "?": 0.4, "!": 0.4, "linebreak": 0.6}}
 
 
@@ -739,6 +739,7 @@ async def download_progress():
 @app.get("/tts/model_status")
 async def model_status():
     return {
+        "mode": "cpu",
         "gpu": {"available": False, "name": "", "vram_gb": 0, "cuda_version": ""},
         "recommended_quality": ["low"],
         "f5": {"loaded":False,"loading":False,"progress":0,"message":"GPU required","error":True},
@@ -754,7 +755,6 @@ async def load_model(req: LoadModelRequest):
 
 
 # Dictionary endpoints
-CUSTOM_DICT_DIR = Path(__file__).resolve().parent / "custom_dict"
 CUSTOM_DICT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -876,7 +876,7 @@ async def save_pause_config(body: PauseConfigBody):
 
 
 # History
-HISTORY_FILE = Path(__file__).resolve().parent / "custom_dict" / "_history.json"
+HISTORY_FILE = CUSTOM_DICT_DIR / "_history.json"
 MAX_HISTORY = 30
 
 

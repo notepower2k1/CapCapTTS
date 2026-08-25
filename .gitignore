@@ -12,7 +12,10 @@ backend/custom_dict/_pause.json
 backend_cpu/custom_dict/_pause.json
 resources/
 *.egg-info/
+*.log
 dist/
+dist-electron/
+node_modules/
 build/
 .vscode/
 .idea/
@@ -20,6 +23,8 @@ local
 bin
 python-portable/
 python-portable-cpu/
+python-embed.zip
 *.zip
 *.bat
+!setup_portable.bat
 *.exe

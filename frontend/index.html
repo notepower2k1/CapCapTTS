@@ -14,7 +14,7 @@
 	<div class="container">
 		<div class="header">
 			<img src="capcap.png" alt="CapCap" style="width:200px;">
-			<span id="gpuBadge"
+			<span id="gpuBadge" data-gpu-only
 				style="display:none;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-sm);font-size:11px;font-weight:600;border:1px solid var(--card-border);color:var(--text-muted);margin:4px 0;"></span>
 			<div class="header-actions">
 				<button class="btn-icon" id="dictBtn">
@@ -164,8 +164,8 @@
 				<div class="card">
 					<div class="toggle-group" id="voiceModeToggle">
 						<button class="toggle-btn active" data-mode="low">Low</button>
-						<button class="toggle-btn" data-mode="medium">Medium</button>
-						<button class="toggle-btn" data-mode="high">High</button>
+						<button class="toggle-btn" data-mode="medium" data-gpu-only>Medium</button>
+						<button class="toggle-btn" data-mode="high" data-gpu-only>High</button>
 					</div>
 					<div class="voice-row">
 						<span class="voice-label" id="currentVoiceLabel">Ban Mai <span
@@ -178,7 +178,7 @@
 							</svg>
 							Change
 						</button>
-						<button class="btn-voice-new" id="newVoiceBtn" style="display:none;">+ New</button>
+						<button class="btn-voice-new" id="newVoiceBtn" data-gpu-only style="display:none;">+ New</button>
 					</div>
 					<div class="action-row">
 						<button class="btn btn-secondary" id="previewBtn">
@@ -212,7 +212,7 @@
 						<input type="range" id="volumeSlider" min="-10" max="10" step="1" value="0">
 						<span class="slider-value" id="volumeVal">0 dB</span>
 					</div>
-						<div id="modelConfig" class="hidden"
+						<div id="modelConfig" class="hidden" data-gpu-only
 							style="margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
 							<div
 								style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;margin-bottom:8px;">
@@ -586,8 +586,8 @@
 				</h2>
 				<div class="dict-tabs" style="display:none;">
 					<button class="dict-tab active" data-tab="low" onclick="switchVoiceTab('low')">Low — Piper</button>
-					<button class="dict-tab" data-tab="medium" onclick="switchVoiceTab('medium')">Medium — F5</button>
-					<button class="dict-tab" data-tab="high" onclick="switchVoiceTab('high')">High — OmniVoice</button>
+					<button class="dict-tab" data-tab="medium" data-gpu-only onclick="switchVoiceTab('medium')">Medium — F5</button>
+					<button class="dict-tab" data-tab="high" data-gpu-only onclick="switchVoiceTab('high')">High — OmniVoice</button>
 				</div>
 				<div class="voice-filter-bar" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
 					<select id="voiceGenderFilter" onchange="renderCurrentVoiceTab()"
@@ -632,7 +632,7 @@
 		</div>
 
 		<!-- Voice Lab Modal -->
-		<div class="modal-overlay hidden" id="voiceLabModal">
+		<div class="modal-overlay hidden" id="voiceLabModal" data-gpu-only>
 			<div class="modal">
 				<h2>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -682,11 +682,11 @@
 				<div class="dict-tabs">
 					<button class="dict-tab active" data-rtab="download"
 						onclick="switchResourceTab('download')">Download</button>
-					<button class="dict-tab" data-rtab="models" onclick="switchResourceTab('models')">Load
+					<button class="dict-tab" data-rtab="models" data-gpu-only onclick="switchResourceTab('models')">Load
 						Models</button>
 				</div>
 				<div id="resourceDownloadTab"></div>
-				<div id="resourceModelsTab" class="hidden"></div>
+				<div id="resourceModelsTab" class="hidden" data-gpu-only></div>
 				<div class="modal-actions">
 					<button class="btn-cancel" id="resourceCloseBtn">Close</button>
 				</div>
@@ -720,8 +720,8 @@
 					<ul style="padding-left:20px;margin:6px 0;">
 						<li>Click <strong>Resources</strong> → tab <strong>Download</strong></li>
 						<li>Download <strong>Piper Voices</strong> (Low · CPU, ~848MB) — works on any machine</li>
-						<li>Download <strong>F5-TTS Model</strong> (Medium · GPU, ~1.3GB) — requires NVIDIA GPU</li>
-						<li>Download <strong>OmniVoice Model</strong> (High · GPU, ~2.3GB) — requires NVIDIA GPU 6GB+
+						<li data-gpu-only>Download <strong>F5-TTS Model</strong> (Medium · GPU, ~1.3GB) — requires NVIDIA GPU</li>
+						<li data-gpu-only>Download <strong>OmniVoice Model</strong> (High · GPU, ~2.3GB) — requires NVIDIA GPU 6GB+
 						</li>
 						<li>Files are saved locally in the <code>models/</code> folder — download once, use forever</li>
 					</ul>
@@ -731,10 +731,10 @@
 						2. Load Models</h3>
 					<ul style="padding-left:20px;margin:6px 0;">
 						<li><strong>Piper</strong> (Low) — loads automatically, no action needed</li>
-						<li><strong>F5-TTS</strong> (Medium) — click Resources → tab <strong>Load Models</strong> → Load
+						<li data-gpu-only><strong>F5-TTS</strong> (Medium) — click Resources → tab <strong>Load Models</strong> → Load
 							F5</li>
-						<li><strong>OmniVoice</strong> (High) — same tab → Load OmniVoice</li>
-						<li>Loading takes 10–60 seconds depending on your GPU</li>
+						<li data-gpu-only><strong>OmniVoice</strong> (High) — same tab → Load OmniVoice</li>
+						<li data-gpu-only>Loading takes 10–60 seconds depending on your GPU</li>
 					</ul>
 
 					<h3
@@ -742,8 +742,9 @@
 						3. Generate Speech</h3>
 					<ul style="padding-left:20px;margin:6px 0;">
 						<li>Type or paste your text (max 5000 characters)</li>
-						<li>Select <strong>Low</strong> / <strong>Medium</strong> / <strong>High</strong> quality tier
+						<li data-gpu-only>Select <strong>Low</strong> / <strong>Medium</strong> / <strong>High</strong> quality tier
 						</li>
+						<li data-cpu-only>Select the <strong>Low</strong> quality tier (Piper)</li>
 						<li>Click <strong>Preview</strong> to hear a sample, or <strong>Generate</strong> for full audio
 						</li>
 						<li>Long text is split into segments — you can replay or regenerate each one</li>
@@ -760,13 +761,13 @@
 						<li><strong>History</strong> — view and replay past generations</li>
 						<li><strong>Advanced</strong> — speed, pitch, volume sliders</li>
 						<li><strong>Normalize</strong> — auto-clean text and normalize volume</li>
-						<li><strong>Voice Lab</strong> — clone a new voice from reference audio (F5 / OmniVoice)</li>
+						<li data-gpu-only><strong>Voice Lab</strong> — clone a new voice from reference audio (F5 / OmniVoice)</li>
 					</ul>
 
 					<h3
 						style="font-family:'Playfair Display',serif;margin:18px 0 6px;font-size:16px;color:var(--accent-primary);">
 						5. Quality Tiers</h3>
-					<table style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0;">
+					<table data-gpu-only style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0;">
 						<tr>
 							<th
 								style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--card-border);color:var(--text-muted);">
@@ -800,11 +801,13 @@
 							<td style="padding:6px 8px;">Yes (6GB+)</td>
 						</tr>
 					</table>
+					<p data-cpu-only style="margin:8px 0;font-size:13px;color:var(--text-muted);">CPU mode uses the Low tier with Piper, which works without a GPU.</p>
 
-					<p style="margin-top:12px;font-size:13px;color:var(--text-muted);">
+					<p data-gpu-only style="margin-top:12px;font-size:13px;color:var(--text-muted);">
 						<strong>Tip:</strong> Start with Low (Piper) — it works on any machine and is the fastest.
 						Switch to Medium or High for better voice quality if you have a GPU.
 					</p>
+					<p data-cpu-only style="margin-top:12px;font-size:13px;color:var(--text-muted);"><strong>Tip:</strong> Piper Low runs locally on the CPU and is ready for everyday text-to-speech.</p>
 
 					<h3
 						style="font-family:'Playfair Display',serif;margin:18px 0 6px;font-size:16px;color:var(--accent-primary);">
