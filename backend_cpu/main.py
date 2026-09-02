@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Form, File, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,10 +22,10 @@ import aiohttp
 import aiofiles
 from huggingface_hub import HfApi
 
-from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, MAX_TEXT_LENGTH
+from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, MAX_TEXT_LENGTH, get_resource_dir, set_resource_dir, get_default_resource_dir, get_voices_dir, get_use_mirror, set_use_mirror
 from tts_quality_checker import evaluate_segment_quality
 from tts_engine import (
-    PiperEngine, TaskManager,
+    PiperEngine, VieneuEngine, TaskManager,
     chunk_text_sentences, merge_audio_segments,
     normalize_vietnamese, invalidate_normalizer_cache, clean_text,
     _chunk_hybrid, get_chunk_config,
@@ -43,8 +43,13 @@ PIPER_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("PIPER_WORKERS", m
 AUDIO_IO_EXECUTOR = ThreadPoolExecutor(max_workers=_worker_count("AUDIO_IO_WORKERS", 2))
 
 
-def _synthesize_one(piper_engine, text: str, voice_id: str, speed: float = 1.0, normalize_audio: bool = True):
-    audio = piper_engine.synthesize(text, voice_id, speed=speed)
+def _synthesize_one(piper_engine, vieneu_engine, text: str, voice_mode: str, voice_id: str, speed: float = 1.0, normalize_audio: bool = True):
+    if voice_mode in ("medium", "vieneu", "turbo"):
+        if not voice_id or voice_id == "banmai":
+            voice_id = "Adam"
+        audio = vieneu_engine.synthesize(text, voice_id, speed=speed)
+    else:
+        audio = piper_engine.synthesize(text, voice_id, speed=speed)
     if normalize_audio:
         target = -20
         if audio.dBFS != float('-inf'):
@@ -103,9 +108,9 @@ def normalize_with_pause_protection(text: str) -> str:
     return ''.join(result)
 
 
-def synthesize_with_pauses(piper_engine, text: str, voice_id: str, pause_cfg: dict, speed: float = 1.0, normalize_audio: bool = True):
+def synthesize_with_pauses(piper_engine, vieneu_engine, voice_mode: str, text: str, voice_id: str, pause_cfg: dict, speed: float = 1.0, normalize_audio: bool = True):
     def _synth(t, vid):
-        return _synthesize_one(piper_engine, t, vid, speed=speed, normalize_audio=normalize_audio)
+        return _synthesize_one(piper_engine, vieneu_engine, t, voice_mode, vid, speed=speed, normalize_audio=normalize_audio)
 
     marker_parts = CUSTOM_PAUSE_RE.split(text)
     result = AudioSegment.silent(duration=0)
@@ -154,7 +159,19 @@ def synthesize_with_pauses(piper_engine, text: str, voice_id: str, pause_cfg: di
 
 
 piper_engine = PiperEngine()
+vieneu_engine = VieneuEngine()
 task_manager = TaskManager()
+
+_load_lock = asyncio.Lock()
+_load_state = {
+    "turbo": {"loaded": False, "loading": False, "progress": 0, "message": "", "error": False},
+}
+
+class LoadModelRequest(BaseModel):
+    model: str
+
+
+
 
 
 @asynccontextmanager
@@ -169,6 +186,40 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_no_cache_header(request, call_next):
+    response = await call_next(request)
+    path = request.url.path.lower()
+    if path.endswith((".js", ".css", ".html")) or path in ("/", "/index.html"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
+@app.post("/tts/load_model")
+async def load_model(req: LoadModelRequest):
+    if req.model in ("turbo", "vieneu", "medium"):
+        if vieneu_engine._model is not None:
+            _load_state["turbo"] = {"loaded": True, "loading": False, "progress": 100, "message": "Already loaded", "error": False}
+            return {"status": "already_loaded"}
+        async with _load_lock:
+            if _load_state["turbo"]["loading"]:
+                return {"status": "already_loading"}
+            _load_state["turbo"] = {"loaded": False, "loading": True, "progress": 20, "message": "Loading VieNeu ONNX models...", "error": False}
+        async def _load_turbo_bg():
+            loop = asyncio.get_running_loop()
+            def _cb(msg, pct):
+                _load_state["turbo"] = {"loaded": False, "loading": True, "progress": pct, "message": msg, "error": False}
+            try:
+                await loop.run_in_executor(None, vieneu_engine.load, _cb)
+                _load_state["turbo"] = {"loaded": True, "loading": False, "progress": 100, "message": "Loaded", "error": False}
+            except Exception as e:
+                _load_state["turbo"] = {"loaded": False, "loading": False, "progress": 0, "message": f"Error: {e}", "error": True}
+        asyncio.create_task(_load_turbo_bg())
+        return {"status": "loading"}
+    raise HTTPException(400, "Model must be 'turbo'")
 
 
 def task_dir(task_id: str) -> Path:
@@ -200,6 +251,10 @@ class ChunkRegenRequest(BaseModel):
 class MergeRequest(BaseModel):
     task_id: str
     output_format: str = "mp3"
+    fade_edges: bool = True
+    volume_match: bool = True
+    crossfade: bool = True
+    compressor: bool = True
 
 
 class PauseConfigBody(BaseModel):
@@ -214,12 +269,35 @@ class DictEntry(BaseModel):
 @app.get("/tts/voices")
 async def list_voices():
     preset = piper_engine.list_voices(include_rate=True)
-    return {"low": preset, "medium": [], "high": []}
+    vieneu_voices = vieneu_engine.list_voices() if vieneu_engine._loaded else []
+    return {"low": preset, "turbo": vieneu_voices, "medium": vieneu_voices, "high": []}
+
+@app.get("/tts/model_status")
+async def model_status():
+    is_loaded = bool(vieneu_engine._loaded and vieneu_engine._model is not None)
+    _load_state["turbo"]["loaded"] = is_loaded
+    return {
+        "mode": "cpu",
+        "gpu": {"available": False, "name": "", "vram_gb": 0, "cuda_version": ""},
+        "turbo": dict(_load_state["turbo"]),
+        "f5": {"loaded": False, "loading": False, "progress": 0, "message": "GPU only", "error": False},
+        "omnivoice": {"loaded": False, "loading": False, "progress": 0, "message": "GPU only", "error": False},
+        "models": {
+            "low": {"loaded": True, "name": "Piper (22kHz)"},
+            "turbo": {"loaded": is_loaded, "name": "VieNeu-TTS (48kHz ONNX)"},
+            "medium": {"loaded": is_loaded, "name": "VieNeu-TTS (48kHz ONNX)"}
+        }
+    }
 
 
 @app.get("/tts/voice_audio/{engine}/{voice_id}")
 async def voice_audio(engine: str, voice_id: str):
-    raise HTTPException(400, "Voice preview only available for Piper voices")
+    vdir = get_voices_dir()
+    for ext in (".wav", ".mp3"):
+        p = vdir / f"{voice_id}{ext}"
+        if p.exists():
+            return FileResponse(str(p), media_type="audio/mpeg" if p.suffix == ".mp3" else "audio/wav")
+    raise HTTPException(404, "Audio not found")
 
 
 @app.post("/tts/preview")
@@ -228,6 +306,8 @@ async def preview_tts(req: TTSRequest):
     if not text:
         raise HTTPException(400, "Text is empty")
 
+    if req.voice_mode in ("turbo", "vieneu") and not vieneu_engine._loaded:
+        raise HTTPException(400, "VieNeu-TTS model not loaded. Load it first via Resources -> Load Models.")
     if req.clean:
         text = clean_text(text)
     if req.normalize:
@@ -243,7 +323,7 @@ async def preview_tts(req: TTSRequest):
         pause_cfg = _load_pause_config()
         loop = asyncio.get_running_loop()
         def _do():
-            return synthesize_with_pauses(piper_engine, preview_text, voice_id, pause_cfg, speed=req.speed)
+            return synthesize_with_pauses(piper_engine, vieneu_engine, req.voice_mode, preview_text, voice_id, pause_cfg, speed=req.speed)
         audio = await loop.run_in_executor(PIPER_EXECUTOR, _do)
     except ValueError as e:
         raise HTTPException(404, str(e))
@@ -301,6 +381,19 @@ async def _run_generation(task_id: str):
         elif split_mode == "paragraph":
             chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["max_chars"], max_chars=cfg["hard_max"], hard_max_chars=cfg["hard_max"])
             is_new_para = [True] * len(chunks)
+        elif split_mode == "custom":
+            raw_blocks = re.split(r'\n\s*\n', text.strip())
+            chunks = []
+            for block in raw_blocks:
+                block = block.strip()
+                if not block:
+                    continue
+                if len(block) <= cfg["hard_max"]:
+                    chunks.append(block)
+                else:
+                    from tts_engine import _split_long_chunk
+                    chunks.extend(_split_long_chunk(block, cfg["hard_max"]))
+            is_new_para = [True] * len(chunks)
         else:
             chunks = _chunk_hybrid(text, min_chars=cfg["min_chars"], target_chars=cfg["target_chars"], max_chars=cfg["max_chars"], hard_max_chars=cfg["hard_max"])
             is_new_para = []
@@ -344,8 +437,9 @@ async def _run_generation(task_id: str):
         spd = task.get("speed", 1.0)
         norm_audio = task.get("normalize_audio", True)
 
+        vmode = task.get("voice_mode", "low")
         def _synth_one(i: int):
-            seg = synthesize_with_pauses(piper_engine, gen_texts[i], voice_id, pause_cfg,
+            seg = synthesize_with_pauses(piper_engine, vieneu_engine, vmode, gen_texts[i], voice_id, pause_cfg,
                 speed=spd, normalize_audio=norm_audio)
             lb_pause = pause_cfg.get("pauses", {}).get("linebreak", 0)
             if i > 0 and chunks_data[i].get("new_paragraph") and lb_pause > 0:
@@ -424,8 +518,9 @@ async def regenerate_chunk(req: ChunkRegenRequest):
         spd = task.get("speed", 1.0)
         na = task.get("normalize_audio", True)
         loop = asyncio.get_running_loop()
+        vmode = task.get("voice_mode", "low")
         def _do(t=chunk_gen_text, vid=voice_id, pc=pause_cfg, s=spd, n_audio=na):
-            return synthesize_with_pauses(piper_engine, t, vid, pc, speed=s, normalize_audio=n_audio)
+            return synthesize_with_pauses(piper_engine, vieneu_engine, vmode, t, vid, pc, speed=s, normalize_audio=n_audio)
         seg = await loop.run_in_executor(PIPER_EXECUTOR, _do)
 
         chunk_filename = f"chunk_{req.chunk_index}.wav"
@@ -464,13 +559,19 @@ async def merge_chunks(req: MergeRequest):
     td = task_dir(req.task_id)
     total_dur = 0
 
+    def _load_post(filepath):
+        seg = AudioSegment.from_file(filepath)
+        if req.fade_edges:
+            return seg.fade_in(8).fade_out(12)
+        return seg
+
     chunk_paths = []
     for c in chunks:
         path = c["audio_path"].split("?path=")[-1]
         chunk_rel = path.split("/", 1)[-1] if "/" in path else path
         chunk_paths.append(str(td / chunk_rel))
     segments = await asyncio.gather(*[
-        loop.run_in_executor(AUDIO_IO_EXECUTOR, AudioSegment.from_file, path) for path in chunk_paths
+        loop.run_in_executor(AUDIO_IO_EXECUTOR, _load_post, path) for path in chunk_paths
     ])
 
     srt_lines = []
@@ -491,11 +592,25 @@ async def merge_chunks(req: MergeRequest):
         srt_lines.append("")
         total_dur += chunk_dur
 
-    merged = await loop.run_in_executor(AUDIO_IO_EXECUTOR, merge_audio_segments, segments)
+    # Mastering: optional volume match, crossfade, compressor
+    def _finalize(segs):
+        if req.volume_match and len(segs) > 1:
+            avg_db = sum(s.dBFS for s in segs) / len(segs)
+            segs = [s.apply_gain(avg_db - s.dBFS) for s in segs]
+        cf_ms = 50 if req.crossfade else 0
+        merged = merge_audio_segments(segs, crossfade_ms=cf_ms)
+        if req.compressor:
+            return merged.compress_dynamic_range(threshold=-20, ratio=2.0, attack=5, release=50)
+        return merged
+    merged = await loop.run_in_executor(AUDIO_IO_EXECUTOR, _finalize, segments)
+
     output_filename = f"final.{output_format}"
     output_path = td / output_filename
     def _write_outputs():
-        merged.export(str(output_path), format=output_format)
+        if output_format.startswith("mp3"):
+            merged.export(str(output_path), format="mp3", bitrate="320k")
+        else:
+            merged.export(str(output_path), format=output_format)
         (td / "final.srt").write_text("\n".join(srt_lines), encoding="utf-8")
     await loop.run_in_executor(AUDIO_IO_EXECUTOR, _write_outputs)
 
@@ -614,6 +729,10 @@ async def reset_task(task_id: str):
 _hf_api = HfApi()
 _dl_state = {}
 _dl_lock = asyncio.Lock()
+def get_hf_url(path: str, repo: str) -> str:
+    base = "https://hf-mirror.com" if get_use_mirror() else "https://huggingface.co"
+    return f"{base}/{repo}/resolve/main/{path}"
+
 HF_URL = "https://huggingface.co/{repo}/resolve/main/{path}"
 
 _PIPER_VOICES = [
@@ -626,11 +745,34 @@ _PIPER_VOICES = [
 
 _RESOURCE_DEFS = [
     {
+        "id": "vieneu",
+        "label": "VieNeu-TTS Model (Medium-Low · 48kHz ONNX)",
+        "desc": "VieNeu v3 Turbo weights + MOSS Audio Tokenizer (~330MB)",
+        "repo_id": "pnnbao-ump/VieNeu-TTS-v3-Turbo",
+        "files": ["vieneu_models"],
+        "local_dir": str(Path.home() / ".cache" / "huggingface" / "hub"),
+    },
+    {
         "id": "piper",
         "label": "Piper Voices (Low · CPU)",
+        "repo_url": "https://huggingface.co/Hacht/CapCapResource/tree/main/piper-new",
         "repo_id": "Hacht/CapCapResource",
         "files": ["piper-new/voices.json", "piper-new/config.json"] + [f"piper-new/{v}.onnx" for v in _PIPER_VOICES],
         "local_dir": str(PIPER_DIR),
+    },
+    {
+        "id": "f5_voices",
+        "label": "Voice References",
+        "desc": "Sample audio references for voice cloning (VieNeu, F5, OmniVoice)",
+        "repo_url": "https://huggingface.co/Hacht/CapCapResource/tree/main/f5_voice",
+        "repo_id": "Hacht/CapCapResource",
+        "files": [f"f5_voice/{f}" for f in [
+            "ai_hanh.mp3", "foxy.mp3", "lan.wav", "liam.mp3", "mai.mp3",
+            "ngan_le.mp3", "ngan_nguyen.mp3", "nhat.mp3", "nhu.mp3",
+            "nhung.mp3", "ninh_don.mp3", "phuong.mp3", "quynh_anh.mp3",
+            "tham.mp3", "trieu_duong.mp3", "trung_caha.mp3", "tung.mp3",
+        ]] + ["f5_voice/voices.json"],
+        "local_dir": str(get_voices_dir()),
     },
 ]
 
@@ -650,19 +792,70 @@ async def _get_file_sizes(repo_id, paths):
             return {}
     return await loop.run_in_executor(None, _fetch)
 
+
+
+def _get_rdef_local_dir(rid: str) -> Path:
+    rdir = get_resource_dir()
+    if rid == "piper":
+        p_new = rdir / "piper-new"
+        if p_new.exists() and any(p_new.glob("*.onnx")):
+            return p_new
+        return rdir / "piper"
+    elif rid in ("f5", "omnivoice"):
+        return rdir / "f5"
+    elif rid == "f5_voices":
+        return rdir / "f5" / "f5_voice"
+    elif rid == "vieneu":
+        return rdir / "huggingface" / "hub"
+    return rdir / rid
+
+def _is_vieneu_downloaded() -> bool:
+    candidates = [
+        get_resource_dir() / "huggingface" / "hub",
+        Path.home() / ".cache" / "huggingface" / "hub"
+    ]
+    for c in candidates:
+        v3_dir = c / "models--pnnbao-ump--VieNeu-TTS-v3-Turbo"
+        moss_dir = c / "models--OpenMOSS-Team--MOSS-Audio-Tokenizer-Nano-ONNX"
+        if v3_dir.exists() and any(v3_dir.rglob("*.onnx")) and moss_dir.exists() and any(moss_dir.rglob("*.onnx")):
+            return True
+    return False
+
 async def _build_catalog():
     result = []
     for rdef in _RESOURCE_DEFS:
         rid = rdef["id"]
+        if rid == "vieneu":
+            downloaded = _is_vieneu_downloaded()
+            async with _dl_lock:
+                dl_info = _dl_state.get(rid, {"status": "done" if downloaded else "none", "progress": 100 if downloaded else 0, "current_file": "", "error": ""})
+            result.append({
+                "id": rid,
+                "label": rdef["label"],
+                "desc": rdef["desc"],
+                "repo_url": "https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo",
+                "target_dir": str(_get_rdef_local_dir("vieneu")),
+                "total_files": 2,
+                "existing_files": 2 if downloaded else 0,
+                "total_size_mb": 330.0,
+                "downloaded": downloaded,
+                "status": dl_info["status"],
+                "progress": dl_info["progress"],
+                "current_file": dl_info["current_file"],
+                "error": dl_info.get("error", ""),
+            })
+            continue
         sizes = await _get_file_sizes(rdef["repo_id"], rdef["files"])
         total_size = sum(sizes.values())
         size_mb = total_size / (1024 * 1024)
-        local_dir = Path(rdef["local_dir"])
+        local_dir = _get_rdef_local_dir(rid)
         existing = sum(1 for fp in rdef["files"] if _local_path(local_dir, fp).exists())
         async with _dl_lock:
             dl_info = _dl_state.get(rid, {"status":"none","progress":0,"current_file":"","error":""})
         result.append({
-            "id": rid, "label": rdef["label"], "desc": "",
+            "id": rid, "label": rdef["label"], "desc": rdef.get("desc", ""),
+            "repo_url": rdef.get("repo_url", f"https://huggingface.co/{rdef['repo_id']}"),
+            "target_dir": str(local_dir),
             "total_files": len(rdef["files"]), "existing_files": existing,
             "total_size_mb": round(size_mb, 1),
             "downloaded": existing == len(rdef["files"]),
@@ -675,7 +868,7 @@ async def _download_resource(rid: str):
     rdef = next((r for r in _RESOURCE_DEFS if r["id"] == rid), None)
     if not rdef:
         return
-    local_dir = Path(rdef["local_dir"])
+    local_dir = _get_rdef_local_dir(rid)
     repo_id = rdef["repo_id"]
     files = rdef["files"]
     sizes = await _get_file_sizes(repo_id, files)
@@ -689,7 +882,7 @@ async def _download_resource(rid: str):
             if target.exists():
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            url = HF_URL.format(repo=repo_id, path=fp)
+            url = get_hf_url(fp, repo_id)
             async with _dl_lock:
                 _dl_state[rid]["current_file"] = fp
             async with aiohttp.ClientSession() as session:
@@ -709,6 +902,64 @@ async def _download_resource(rid: str):
     except Exception as e:
         async with _dl_lock:
             _dl_state[rid] = {"status":"error","progress":0,"current_file":"","error":str(e)}
+
+
+# ─── Storage Settings ───
+
+class SettingsRequest(BaseModel):
+    resource_dir: str | None = None
+    use_mirror: bool | None = None
+
+@app.get("/tts/settings")
+async def get_settings():
+    return {
+        "resource_dir": str(get_resource_dir()),
+        "default_resource_dir": str(get_default_resource_dir()),
+        "use_mirror": get_use_mirror(),
+    }
+
+@app.post("/tts/settings")
+async def update_settings(req: SettingsRequest):
+    if req.use_mirror is not None:
+        set_use_mirror(req.use_mirror)
+    if req.resource_dir:
+        new_dir = set_resource_dir(req.resource_dir)
+        os.environ["HF_HOME"] = str(new_dir / "huggingface")
+        piper_engine._models_dir = new_dir / "piper"
+        piper_engine._meta = piper_engine._load_meta()
+    return {
+        "status": "updated",
+        "resource_dir": str(get_resource_dir()),
+        "default_resource_dir": str(get_default_resource_dir()),
+        "use_mirror": get_use_mirror(),
+    }
+
+@app.post("/tts/open_resource_folder")
+async def open_resource_folder(req: dict):
+    rid = req.get("resource_id", "")
+    local_dir = _get_rdef_local_dir(rid)
+    local_dir.mkdir(parents=True, exist_ok=True)
+    import sys, subprocess
+    if sys.platform == "win32":
+        os.startfile(str(local_dir))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(local_dir)])
+    else:
+        subprocess.Popen(["xdg-open", str(local_dir)])
+    return {"status": "opened", "path": str(local_dir)}
+
+@app.post("/tts/open_folder")
+async def open_folder(req: dict = None):
+    p = get_resource_dir()
+    p.mkdir(parents=True, exist_ok=True)
+    import sys, subprocess
+    if sys.platform == "win32":
+        os.startfile(str(p))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(p)])
+    else:
+        subprocess.Popen(["xdg-open", str(p)])
+    return {"status": "opened", "path": str(p)}
 
 @app.get("/tts/resource_catalog")
 async def resource_catalog():
@@ -735,24 +986,7 @@ async def download_progress():
         return dict(_dl_state)
 
 
-# ─── Model Status (CPU stub — GPU models not available) ───
 
-@app.get("/tts/model_status")
-async def model_status():
-    return {
-        "mode": "cpu",
-        "gpu": {"available": False, "name": "", "vram_gb": 0, "cuda_version": ""},
-        "recommended_quality": ["low"],
-        "f5": {"loaded":False,"loading":False,"progress":0,"message":"GPU required","error":True},
-        "omnivoice": {"loaded":False,"loading":False,"progress":0,"message":"GPU required","error":True},
-    }
-
-class LoadModelRequest(BaseModel):
-    model: str
-
-@app.post("/tts/load_model")
-async def load_model(req: LoadModelRequest):
-    raise HTTPException(400, "GPU required — use backend/ (GPU version) for F5-TTS / OmniVoice")
 
 
 # Dictionary endpoints
@@ -956,3 +1190,69 @@ if __name__ == "__main__":
             traceback.print_exc(file=f)
         print(f"\nFATAL: {e}\nSee error.log for details.")
         os.system("pause")
+
+
+# ─── Voice Cloning & Management (CPU) ───
+
+def _normalize_voice_name(name: str) -> str:
+    import unicodedata
+    name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('ASCII')
+    name = re.sub(r'[^a-zA-Z0-9_-]', '_', name.strip().lower())
+    return re.sub(r'_+', '_', name).strip('_')
+
+@app.post("/tts/clone")
+async def clone_voice(voice_id: str = Form(...), ref_text: str = Form(...), ref_audio: UploadFile = File(...),
+                      gender: str = Form("male"), description: str = Form("No description")):
+    raw_name = voice_id.strip()
+    vid = _normalize_voice_name(raw_name)
+    if not vid:
+        raise HTTPException(400, "Voice ID is required")
+    if not ref_text.strip():
+        raise HTTPException(400, "Reference text is required")
+
+    ext = Path(ref_audio.filename).suffix if ref_audio.filename else ".wav"
+    vdir = get_voices_dir()
+    target_audio = vdir / f"{vid}{ext}"
+    content = await ref_audio.read()
+    with open(target_audio, "wb") as f:
+        f.write(content)
+
+    meta_file = vdir / "voices.json"
+    entries = []
+    if meta_file.exists():
+        try:
+            entries = json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    entries = [e for e in entries if Path(e.get("audio_path", "")).stem != vid]
+    entries.append({
+        "name": raw_name,
+        "gender": gender,
+        "audio_path": f"{vid}{ext}",
+        "description": description,
+        "text_ref": ref_text,
+        "clone": True,
+    })
+    meta_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"voice_id": vid, "raw_name": raw_name, "status": "cloned"}
+
+@app.delete("/tts/voices/{voice_id}")
+async def delete_voice(voice_id: str):
+    vdir = get_voices_dir()
+    meta_file = vdir / "voices.json"
+    if not meta_file.exists():
+        raise HTTPException(404, "Voice not found")
+    try:
+        entries = json.loads(meta_file.read_text(encoding="utf-8"))
+    except Exception:
+        entries = []
+    entry = next((e for e in entries if Path(e.get("audio_path", "")).stem == voice_id), None)
+    if not entry:
+        raise HTTPException(404, "Voice not found")
+    for ext in (".wav", ".mp3", ".txt"):
+        f = vdir / f"{voice_id}{ext}"
+        if f.exists():
+            f.unlink()
+    entries = [e for e in entries if Path(e.get("audio_path", "")).stem != voice_id]
+    meta_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"status": "deleted", "voice_id": voice_id}

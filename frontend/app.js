@@ -33,12 +33,12 @@ const CHUNK_PER_PAGE = 10;
 let APP_MODE = 'gpu';
 let CURRENT_VOICE_MODE = 'low';
 let CURRENT_VOICE_ID = 'banmai';
-let ALL_VOICES = { low: [], medium: [], high: [] };
+let ALL_VOICES = { low: [], turbo: [], medium: [], high: [] };
 let VOICE_RATES = { preset: 18, custom: {} };
 let PAUSE_CFG = { enabled: true, pauses: { '.': 0.4, ',': 0.2, ';': 0.3, ':': 0.3, '?': 0.4, '!': 0.4, linebreak: 0.6 } };
 
-const QUALITY_LABELS = { low: 'Piper', medium: 'F5', high: 'OmniVoice' };
-const QUALITY_BADGE_CLASS = { low: 'piper', medium: 'f5', high: 'omnivoice' };
+const QUALITY_LABELS = { low: 'Piper', turbo: 'VieNeu', medium: 'F5', high: 'OmniVoice' };
+const QUALITY_BADGE_CLASS = { low: 'piper', turbo: 'vieneu', medium: 'f5', high: 'omnivoice' };
 
 function applyAppMode(data) {
 	const mode = data && data.mode ? String(data.mode).toLowerCase() : ((data && data.gpu && data.gpu.available) ? 'gpu' : 'cpu');
@@ -46,21 +46,14 @@ function applyAppMode(data) {
 	document.body.classList.toggle('cpu-mode', APP_MODE === 'cpu');
 
 	if (APP_MODE === 'cpu') {
-		CURRENT_VOICE_MODE = 'low';
-		document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(btn => {
-			btn.classList.toggle('active', btn.dataset.mode === 'low');
-		});
+		const medTab = document.getElementById('tabMediumVoice');
+		if (medTab) medTab.textContent = 'Medium — VieNeu';
+		const medBtn = document.querySelector('#voiceModeToggle .toggle-btn[data-mode="medium"]');
+		if (medBtn) medBtn.title = 'VieNeu-TTS v3 Turbo (48kHz ONNX)';
 		document.querySelectorAll('#voiceModal .dict-tab').forEach(tab => {
-			tab.classList.toggle('active', tab.dataset.tab === 'low');
+			tab.classList.toggle('active', tab.dataset.tab === CURRENT_VOICE_MODE);
 		});
-		const modelsTab = document.querySelector('#resourceModal .dict-tab[data-rtab="models"]');
-		if (modelsTab) modelsTab.classList.remove('active');
-		const downloadTab = document.querySelector('#resourceModal .dict-tab[data-rtab="download"]');
-		if (downloadTab) downloadTab.classList.add('active');
-		const modelsPanel = document.getElementById('resourceModelsTab');
-		if (modelsPanel) modelsPanel.classList.add('hidden');
-		const downloadPanel = document.getElementById('resourceDownloadTab');
-		if (downloadPanel) downloadPanel.classList.remove('hidden');
+
 	}
 
 	updateModelConfig();
@@ -225,14 +218,14 @@ function _saveFileConfig(idx) {
 		voice_label: (ALL_VOICES[mode] || []).find(v => v.id === CURRENT_VOICE_ID)?.label || CURRENT_VOICE_ID,
 		normalize: document.getElementById('normalizeCheckbox').checked,
 		clean: document.getElementById('cleanCheckbox').checked,
-		normalize_audio: document.getElementById('normalizeAudioCheckbox').checked,
+		normalize_audio: document.getElementById('normalizeAudioCheckbox')?.checked ?? false,
 		split_segments: true,
 		split_mode: document.getElementById('splitModeSelect').value,
 		speed: parseFloat(document.getElementById('speedSlider').value),
 		volume: parseFloat(document.getElementById('volumeSlider').value),
 	};
 	f._configured = true;
-	showToast('Config saved for ' + f.name);
+	showToast(t('toast_config_saved_prefix', 'Config saved for ') + f.name);
 	renderFileQueue();
 }
 
@@ -250,7 +243,7 @@ function renderFileQueue() {
           <div class="fq-header">
             <span>${FILE_QUEUE.length} / ${MAX_QUEUE} files${totalPages > 1 ? ' · Page ' + (_fqPage + 1) + '/' + totalPages : ''}</span>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              ${hasPending ? `<button onclick="for(let i=0;i<FILE_QUEUE.length;i++){if(FILE_QUEUE[i].status==='pending')_saveFileConfig(i)}renderFileQueue();showToast('Config applied to all pending files')" style="background:var(--bg-secondary);color:var(--text-secondary);border-color:var(--card-border);font-size:11px;">Apply to all</button>` : ''}
+              ${hasPending ? `<button onclick="for(let i=0;i<FILE_QUEUE.length;i++){if(FILE_QUEUE[i].status==='pending')_saveFileConfig(i)}renderFileQueue();showToast(t('toast_config_applied_all', 'Config applied to all pending files'))" style="background:var(--bg-secondary);color:var(--text-secondary);border-color:var(--card-border);font-size:11px;">Apply to all</button>` : ''}
               ${hasPending ? `<button onclick="processAllFiles()" id="processAllBtn">Process All</button>` : ''}
               ${totalPages > 1 && _fqPage > 0 ? `<button onclick="_fqPage--;renderFileQueue()" style="background:var(--bg-secondary);color:var(--text-secondary);border-color:var(--card-border);font-size:11px;">&#9664;</button>` : ''}
               ${totalPages > 1 && _fqPage < totalPages - 1 ? `<button onclick="_fqPage++;renderFileQueue()" style="background:var(--bg-secondary);color:var(--text-secondary);border-color:var(--card-border);font-size:11px;">&#9654;</button>` : ''}
@@ -299,7 +292,8 @@ function _loadFileToEditor(idx) {
 		updateModelConfig();
 		document.getElementById('normalizeCheckbox').checked = c.normalize || false;
 		document.getElementById('cleanCheckbox').checked = c.clean || false;
-		document.getElementById('normalizeAudioCheckbox').checked = c.normalize_audio !== false;
+		updateNormalizeState();
+		const normAudioEl = document.getElementById('normalizeAudioCheckbox'); if (normAudioEl) normAudioEl.checked = c.normalize_audio !== false;
 		if (c.split_mode) document.getElementById('splitModeSelect').value = c.split_mode;
 		if (c.speed !== undefined) { document.getElementById('speedSlider').value = c.speed; document.getElementById('speedSlider').dispatchEvent(new Event('input')); }
 		if (c.volume !== undefined) { document.getElementById('volumeSlider').value = c.volume; document.getElementById('volumeSlider').dispatchEvent(new Event('input')); }
@@ -375,7 +369,7 @@ async function processSingleFile(idx) {
 				text: f.text, voice_mode: mode, voice_id: vid, output_format: 'mp3',
 				normalize: c.normalize !== undefined ? c.normalize : document.getElementById('normalizeCheckbox').checked,
 				clean: c.clean !== undefined ? c.clean : document.getElementById('cleanCheckbox').checked,
-				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox').checked,
+				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox')?.checked ?? false,
 				speed: c.speed !== undefined ? c.speed : parseFloat(document.getElementById('speedSlider').value),
 				volume: c.volume !== undefined ? c.volume : parseFloat(document.getElementById('volumeSlider').value),
 				pitch: 0,
@@ -495,14 +489,14 @@ if (savedDraft) {
 
 // Input action buttons
 document.getElementById('clearTextBtn').addEventListener('click', () => {
-	if (textInput.value && !confirm('Clear all text?')) return;
+	if (textInput.value && !confirm(t('confirm_clear_all', 'Clear all text?'))) return;
 	textInput.value = '';
 	textInput.dispatchEvent(new Event('input'));
 });
 
 document.getElementById('saveDraftBtn').addEventListener('click', () => {
 	localStorage.setItem('tts_draft', textInput.value);
-	showToast('Draft saved');
+	showToast(t('toast_draft_saved', 'Draft saved'));
 	updateAutosaveIndicator();
 });
 
@@ -516,17 +510,17 @@ voiceModeToggle.addEventListener('click', e => {
 	const btn = e.target.closest('.toggle-btn');
 	if (!btn) return;
 	const mode = btn.dataset.mode;
-	if (APP_MODE === 'cpu' && mode !== 'low') return;
+	if (APP_MODE === 'cpu' && mode !== 'low' && mode !== 'turbo') return;
 	const list = ALL_VOICES[mode] || [];
 	if (list.length === 0) {
-		const names = { medium: 'F5-TTS', high: 'OmniVoice' };
+		const names = { turbo: 'VieNeu-TTS', medium: 'F5-TTS', high: 'OmniVoice' };
 		showToast(`Load ${names[mode] || mode} model in Resources tab first`);
 		return;
 	}
 	voiceModeToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
 	btn.classList.add('active');
 	CURRENT_VOICE_MODE = mode;
-	document.getElementById('newVoiceBtn').style.display = (CURRENT_VOICE_MODE === 'medium' || CURRENT_VOICE_MODE === 'high') ? 'inline-block' : 'none';
+	document.getElementById('newVoiceBtn').style.display = (CURRENT_VOICE_MODE === 'turbo' || CURRENT_VOICE_MODE === 'medium' || CURRENT_VOICE_MODE === 'high') ? 'inline-block' : 'none';
 	updateSplitCheckbox();
 	updateModelConfig();
 	if (!list.find(v => v.id === CURRENT_VOICE_ID)) {
@@ -543,7 +537,7 @@ async function loadVoices() {
 		ALL_VOICES = data;
 
 		// Hide quality tiers with no loaded voices
-		['low', 'medium', 'high'].forEach(mode => {
+		['low', 'turbo', 'medium', 'high'].forEach(mode => {
 			const hasVoices = (data[mode] && data[mode].length > 0);
 			const toggleBtn = document.querySelector(`#voiceModeToggle .toggle-btn[data-mode="${mode}"]`);
 			const modalTab = document.querySelector(`#voiceModal .dict-tab[data-tab="${mode}"]`);
@@ -563,7 +557,7 @@ async function loadVoices() {
 
 		// If current mode has no voices, pick first available
 		if (!(ALL_VOICES[CURRENT_VOICE_MODE] && ALL_VOICES[CURRENT_VOICE_MODE].length > 0)) {
-			const available = ['low', 'medium', 'high'].find(m => ALL_VOICES[m] && ALL_VOICES[m].length > 0);
+			const available = ['low', 'turbo', 'medium', 'high'].find(m => ALL_VOICES[m] && ALL_VOICES[m].length > 0);
 			if (available) {
 				CURRENT_VOICE_MODE = available;
 				document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === available));
@@ -624,7 +618,7 @@ async function checkGpuAndShowInfo() {
 }
 
 function anyVoiceExists() {
-	return ['low', 'medium', 'high'].some(m => ALL_VOICES[m] && ALL_VOICES[m].length > 0);
+	return ['low', 'turbo', 'medium', 'high'].some(m => ALL_VOICES[m] && ALL_VOICES[m].length > 0);
 }
 
 function updateVoiceLabel() {
@@ -634,7 +628,11 @@ function updateVoiceLabel() {
 		return;
 	}
 	const list = ALL_VOICES[CURRENT_VOICE_MODE] || [];
-	const v = list.find(x => x.id === CURRENT_VOICE_ID);
+	let v = list.find(x => x.id === CURRENT_VOICE_ID);
+	if (!v && list.length > 0) {
+		v = list[0];
+		CURRENT_VOICE_ID = v.id;
+	}
 	const genderIcon = v && v.gender === 'male' ? '&#9794;' : v && v.gender === 'female' ? '&#9792;' : '';
 	const badgeClass = QUALITY_BADGE_CLASS[CURRENT_VOICE_MODE] || 'piper';
 	const engineBadge = `<span class="voice-engine-badge ${badgeClass}">${QUALITY_LABELS[CURRENT_VOICE_MODE]}</span>`;
@@ -660,12 +658,12 @@ function updateModelConfig() {
 		panel.classList.remove('hidden');
 		if (cfgRow) cfgRow.style.display = '';
 		if (CURRENT_VOICE_MODE === 'medium') {
-			if (title) title.textContent = 'Model Config \u2014 Medium (F5)';
+			if (title) title.textContent = t('lbl_model_config_f5', 'Model Config — Medium (F5)');
 			if (stepsRow) stepsRow.style.display = '';
 			if (swayRow) swayRow.style.display = '';
 			if (numStepRow) numStepRow.style.display = 'none';
 		} else {
-			if (title) title.textContent = 'Model Config \u2014 High (OmniVoice)';
+			if (title) title.textContent = t('lbl_model_config_omni', 'Model Config — High (OmniVoice)');
 			if (stepsRow) stepsRow.style.display = 'none';
 			if (swayRow) swayRow.style.display = 'none';
 			if (numStepRow) numStepRow.style.display = '';
@@ -684,10 +682,10 @@ function updateCharCount() {
 	const len = text.length;
 	const words = len > 0 ? text.split(/\s+/).filter(w => w.length > 0).length : 0;
 
-	charCount.textContent = `${len.toLocaleString()} chars`;
+	charCount.textContent = `${len.toLocaleString()} ${t('unit_chars', 'chars')}`;
 	charCount.style.color = len > 4800 ? 'var(--error)' : 'var(--text-muted)';
 
-	if (wordCount) wordCount.textContent = `${words.toLocaleString()} words`;
+	if (wordCount) wordCount.textContent = `${words.toLocaleString()} ${t('unit_words', 'words')}`;
 
 	let estSec = len > 0 ? len / VOICE_RATES.preset : 0;
 	if (PAUSE_CFG.enabled) {
@@ -711,19 +709,20 @@ function updateCharCount() {
 	const estRem = rounded % 60;
 	const durationStr = estMin > 0 ? `~${estMin}m ${estRem}s` : `~${estRem}s`;
 
-	if (estDuration) estDuration.textContent = `${durationStr} audio`;
+	if (estDuration) estDuration.textContent = `${durationStr} ${t('unit_audio', 'audio')}`;
 
 	const estSegCount = len > 0 ? Math.ceil(len / 400) : 1;
-	if (estSegments) estSegments.textContent = `${estSegCount} segment${estSegCount !== 1 ? 's' : ''}`;
+	if (estSegments) estSegments.textContent = `${estSegCount} ${t('unit_segments', 'segments')}`;
 }
 
 /* Voice Modal */
 function switchVoiceTab(tab) {
-	if (APP_MODE === 'cpu' && tab !== 'low') tab = 'low';
+	if (APP_MODE === 'cpu' && (tab === 'medium' || tab === 'high')) tab = 'turbo';
 	document.querySelectorAll('#voiceModal .dict-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-	document.getElementById('voiceLowList').classList.toggle('hidden', tab !== 'low');
-	document.getElementById('voiceMediumList').classList.toggle('hidden', tab !== 'medium');
-	document.getElementById('voiceHighList').classList.toggle('hidden', tab !== 'high');
+	document.getElementById('voiceLowList')?.classList.toggle('hidden', tab !== 'low');
+	document.getElementById('voiceTurboList')?.classList.toggle('hidden', tab !== 'turbo');
+	document.getElementById('voiceMediumList')?.classList.toggle('hidden', tab !== 'medium');
+	document.getElementById('voiceHighList')?.classList.toggle('hidden', tab !== 'high');
 	renderCurrentVoiceTab();
 }
 
@@ -733,7 +732,7 @@ function renderCurrentVoiceTab() {
 }
 
 function renderVoiceList(mode) {
-	const containerId = mode === 'low' ? 'voiceLowList' : mode === 'medium' ? 'voiceMediumList' : 'voiceHighList';
+	const containerId = mode === 'low' ? 'voiceLowList' : mode === 'turbo' ? 'voiceTurboList' : mode === 'medium' ? 'voiceMediumList' : 'voiceHighList';
 	const container = document.getElementById(containerId);
 	const genderFilter = document.getElementById('voiceGenderFilter')?.value || '';
 	const typeFilter = document.getElementById('voiceTypeFilter')?.value || '';
@@ -742,13 +741,13 @@ function renderVoiceList(mode) {
 	if (typeFilter === 'clone') list = list.filter(v => v.is_clone);
 	else if (typeFilter === 'default') list = list.filter(v => !v.is_clone);
 	if (list.length === 0) {
-		container.innerHTML = '<div class="hist-empty">No voices match the filter</div>'; return;
+		container.innerHTML = `<div class="hist-empty">${t('no_voices_match', 'No voices match the filter')}</div>`; return;
 	}
 	container.innerHTML = list.map(v => {
 		const isSelected = v.id === CURRENT_VOICE_ID && CURRENT_VOICE_MODE === mode;
 		const genderIcon = v.gender === 'male' ? '&#9794;' : v.gender === 'female' ? '&#9792;' : '&#9733;';
 		const genderColor = v.gender === 'male' ? 'var(--accent-primary)' : v.gender === 'female' ? '#c47a9e' : 'var(--text-muted)';
-		const cloneBadge = v.is_clone ? '<span style="font-size:10px;background:var(--accent-gold);color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:600;">CLONE</span>' : '<span style="font-size:10px;background:var(--bg-secondary);color:var(--text-muted);padding:1px 6px;border-radius:8px;margin-left:6px;">DEFAULT</span>';
+		const cloneBadge = v.is_clone ? `<span style="font-size:10px;background:var(--accent-gold);color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:600;">${t('badge_clone', 'CLONE')}</span>` : `<span style="font-size:10px;background:var(--bg-secondary);color:var(--text-muted);padding:1px 6px;border-radius:8px;margin-left:6px;">${t('badge_default', 'DEFAULT')}</span>`;
 		return `<div class="voice-card ${isSelected ? 'selected' : ''}" onclick="selectVoiceFromCard('${mode}','${v.id}')">
       <div class="voice-card-avatar" style="background:${genderColor}15;color:${genderColor};border-color:${genderColor}40;">${genderIcon}</div>
       <div class="voice-card-info">
@@ -756,13 +755,13 @@ function renderVoiceList(mode) {
         <div class="voice-card-desc" title="${escapeHtml(v.description || v.ref_text || '')}">${escapeHtml(v.description || v.ref_text || '')}</div>
       </div>
       <div class="voice-card-actions" style="display:flex;gap:4px;align-items:center;">
-        <button onclick="event.stopPropagation();previewVoice('${mode}','${v.id}')" title="Preview">
+        <button onclick="event.stopPropagation();previewVoice('${mode}','${v.id}')" title="${t('btn_preview', 'Preview')}">
           <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
-        ${v.is_clone ? `<button onclick="event.stopPropagation();editVoiceDesc('${mode}','${v.id}')" title="Edit description">
+        ${v.is_clone ? `<button onclick="event.stopPropagation();editVoiceDesc('${mode}','${v.id}')" title="${t('edit_description', 'Edit description')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>` : ''}
-        ${v.is_clone ? `<button onclick="event.stopPropagation();deleteVoice('${mode}','${v.id}')" title="Delete voice" style="color:var(--error);">
+        ${v.is_clone ? `<button onclick="event.stopPropagation();deleteVoice('${mode}','${v.id}')" title="${t('delete_voice', 'Delete voice')}" style="color:var(--error);">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>` : ''}
       </div>
@@ -771,7 +770,7 @@ function renderVoiceList(mode) {
 }
 
 function selectVoiceFromCard(mode, id) {
-	if (APP_MODE === 'cpu' && mode !== 'low') return;
+	if (APP_MODE === 'cpu' && mode !== 'low' && mode !== 'turbo') return;
 	const list = ALL_VOICES[mode] || [];
 	const v = list.find(x => x.id === id);
 	if (v) {
@@ -781,7 +780,7 @@ function selectVoiceFromCard(mode, id) {
 		updateSplitCheckbox();
 		updateModelConfig();
 		document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-		document.getElementById('newVoiceBtn').style.display = (mode === 'medium' || mode === 'high') ? 'inline-block' : 'none';
+		document.getElementById('newVoiceBtn').style.display = (mode === 'turbo' || mode === 'medium' || mode === 'high') ? 'inline-block' : 'none';
 		updateCharCount();
 		renderVoiceList(mode);
 	}
@@ -797,12 +796,12 @@ function editVoiceDesc(mode, id) {
 		method: 'PATCH', headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ description: newDesc.trim() || 'No description' }),
 	}).then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
-		.then(() => { loadVoices().then(() => renderCurrentVoiceTab()); showToast('Description updated'); })
+		.then(() => { loadVoices().then(() => renderCurrentVoiceTab()); showToast(t('toast_desc_updated', 'Description updated')); })
 		.catch(() => alert('Failed to update description'));
 }
 
 function deleteVoice(mode, id) {
-	if (!confirm('Delete this cloned voice?')) return;
+	if (!confirm(t('confirm_delete_voice', 'Delete this cloned voice?'))) return;
 	fetch(`${API_BASE}/tts/voices/${id}`, { method: 'DELETE' })
 		.then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
 		.then(() => {
@@ -813,7 +812,7 @@ function deleteVoice(mode, id) {
 					if (first) selectVoiceFromCard(first.engine === 'f5' ? 'medium' : first.engine === 'omnivoice' ? 'high' : first.engine || 'low', first.id);
 				}
 			});
-			showToast('Voice deleted');
+			showToast(t('toast_voice_deleted', 'Voice deleted'));
 		})
 		.catch(() => alert('Cannot delete default voice'));
 }
@@ -822,17 +821,31 @@ function previewVoice(mode, id) {
 	const list = ALL_VOICES[mode] || [];
 	const v = list.find(x => x.id === id);
 	if (!v) return;
-	if (mode === 'low') {
+	const isTurboClone = (mode === 'turbo' && (ALL_VOICES.turbo || []).find(v => v.id === id)?.is_clone);
+	if (isTurboClone) {
+		const audio = new Audio(`${API_BASE}/tts/voice_audio/f5/${id}`);
+		audio.play().catch(() => {});
+		return;
+	}
+	if (mode === 'low' || mode === 'turbo' || (APP_MODE === 'cpu' && mode === 'medium')) {
 		const text = 'Xin chào đây là đoạn thử giọng nói, cảm ơn bạn đã lắng nghe.';
 		fetch(`${API_BASE}/tts/preview`, {
 			method: 'POST', headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ text, voice_mode: 'low', voice_id: id, normalize: false, clean: false, normalize_audio: true, speed: 1, pitch: 0, volume: 0 }),
-		}).then(r => r.json()).then(data => {
+			body: JSON.stringify({ text, voice_mode: mode, voice_id: id, normalize: false, clean: false, normalize_audio: true, speed: 1, pitch: 0, volume: 0 }),
+		}).then(async r => {
+			if (!r.ok) {
+				const err = await r.json().catch(() => ({}));
+				throw new Error(err.detail || 'Preview failed');
+			}
+			return r.json();
+		}).then(data => {
 			const wrap = getOrCreateMiniPlayer();
 			const aud = wrap.querySelector('audio');
 			aud.src = `${API_BASE}${data.audio_url}`;
 			aud.play().catch(() => { });
-		}).catch(() => { });
+		}).catch(err => {
+			showToast(err.message);
+		});
 	} else {
 		const engine = mode === 'medium' ? 'f5' : 'omnivoice';
 		const url = `${API_BASE}/tts/voice_audio/${engine}/${id}`;
@@ -899,7 +912,7 @@ previewBtn.addEventListener('click', async () => {
 		const res = await fetch(`${API_BASE}/tts/preview`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ text, voice_mode: CURRENT_VOICE_MODE, voice_id: CURRENT_VOICE_ID, normalize, clean: document.getElementById('cleanCheckbox').checked, normalize_audio: document.getElementById('normalizeAudioCheckbox').checked, speed: parseFloat(document.getElementById('speedSlider').value), pitch: 0, volume: parseFloat(document.getElementById('volumeSlider').value), cfg_strength: parseFloat(document.getElementById('cfgSlider').value), steps: parseInt(document.getElementById('stepsSlider').value), sway: parseFloat(document.getElementById('swaySlider').value), num_step: parseInt(document.getElementById('numStepSlider').value) }),
+			body: JSON.stringify({ text, voice_mode: CURRENT_VOICE_MODE, voice_id: CURRENT_VOICE_ID, normalize, clean: document.getElementById('cleanCheckbox').checked, normalize_audio: document.getElementById('normalizeAudioCheckbox')?.checked ?? false, speed: parseFloat(document.getElementById('speedSlider').value), pitch: 0, volume: parseFloat(document.getElementById('volumeSlider').value), cfg_strength: parseFloat(document.getElementById('cfgSlider').value), steps: parseInt(document.getElementById('stepsSlider').value), sway: parseFloat(document.getElementById('swaySlider').value), num_step: parseInt(document.getElementById('numStepSlider').value) }),
 		});
 		if (!res.ok) throw new Error('Preview failed');
 		const data = await res.json();
@@ -921,9 +934,9 @@ async function startGeneration() {
 	} else {
 		// Normal mode: use textarea
 		const text = textInput.value.trim();
-		if (!text) { showError('Enter some text'); return; }
+		if (!text) { showError(t('err_enter_text', 'Enter some text')); return; }
 	}
-	if (!CURRENT_VOICE_ID) { showError('Select a voice'); return; }
+	if (!CURRENT_VOICE_ID) { showError(t('err_select_voice', 'Select a voice')); return; }
 
 	hideError();
 	hideFinalAudio();
@@ -955,7 +968,7 @@ async function startGeneration() {
 				text, voice_mode: mode, voice_id: vid, output_format: 'mp3',
 				normalize: c.normalize !== undefined ? c.normalize : document.getElementById('normalizeCheckbox').checked,
 				clean: c.clean !== undefined ? c.clean : document.getElementById('cleanCheckbox').checked,
-				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox').checked,
+				normalize_audio: c.normalize_audio !== undefined ? c.normalize_audio : document.getElementById('normalizeAudioCheckbox')?.checked ?? false,
 				speed: c.speed !== undefined ? c.speed : parseFloat(document.getElementById('speedSlider').value),
 				volume: c.volume !== undefined ? c.volume : parseFloat(document.getElementById('volumeSlider').value),
 				pitch: 0,
@@ -1084,7 +1097,14 @@ async function doMerge() {
 		const res = await fetch(`${API_BASE}/tts/merge`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ task_id: CURRENT_TASK_ID, output_format: 'mp3' }),
+			body: JSON.stringify({
+				task_id: CURRENT_TASK_ID,
+				output_format: 'mp3',
+				fade_edges: document.getElementById('mFadeEdges')?.checked ?? true,
+				volume_match: document.getElementById('mVolumeMatch')?.checked ?? true,
+				crossfade: document.getElementById('mCrossfade')?.checked ?? true,
+				compressor: document.getElementById('mCompressor')?.checked ?? true
+			}),
 		});
 		if (!res.ok) throw new Error('Merge failed');
 		const data = await res.json();
@@ -1309,7 +1329,7 @@ function onError(msg) {
 
 mergeBtn.addEventListener('click', async () => {
 	if (!CURRENT_TASK_ID) return;
-	mergeBtn.disabled = true; mergeBtn.textContent = 'Merging...';
+	mergeBtn.disabled = true; mergeBtn.textContent = t('merging_dots', 'Merging...');
 	showProgressPopup();
 	setProgress(90, 'Merging audio...');
 	await doMerge();
@@ -1346,7 +1366,7 @@ reopenFinalBtn.addEventListener('click', showFinalAudio);
 
 resetBtn.addEventListener('click', async () => {
 	if (!CURRENT_TASK_ID) return;
-	if (!confirm('Reset this session? All generated audio will be deleted.')) return;
+	if (!confirm(t('confirm_reset', 'Reset this session? All generated audio will be deleted.'))) return;
 	try {
 		await fetch(`${API_BASE}/tts/reset/${CURRENT_TASK_ID}`, { method: 'POST' });
 	} catch (_) { }
@@ -1367,7 +1387,7 @@ resetBtn.addEventListener('click', async () => {
 
 floatCancelBtn.addEventListener('click', async () => {
 	if (!CURRENT_TASK_ID) return;
-	if (!confirm('Cancel generation?')) return;
+	if (!confirm(t('confirm_cancel', 'Cancel generation?'))) return;
 	if (POLL_INTERVAL) { clearInterval(POLL_INTERVAL); POLL_INTERVAL = null; }
 	try {
 		await fetch(`${API_BASE}/tts/reset/${CURRENT_TASK_ID}`, { method: 'POST' });
@@ -1381,7 +1401,7 @@ floatCancelBtn.addEventListener('click', async () => {
 });
 
 /* Dictionary button */
-document.getElementById('dictBtn').addEventListener('click', () => {
+document.getElementById('dictBtn')?.addEventListener('click', () => {
 	loadDict();
 	document.getElementById('dictModal').classList.remove('hidden');
 	document.querySelector('#dictModal .dict-tab[data-tab=acronyms]').click();
@@ -1475,7 +1495,7 @@ document.getElementById('historyCloseBtn').addEventListener('click', () => {
 	document.getElementById('historyModal').classList.add('hidden');
 });
 document.getElementById('historyClearBtn').addEventListener('click', async () => {
-	if (!confirm('Clear all history and audio files?')) return;
+	if (!confirm(t('confirm_clear_hist', 'Clear all history and audio files?'))) return;
 	await fetch(`${API_BASE}/tts/history`, { method: 'DELETE' });
 	await loadHistory();
 });
@@ -1568,7 +1588,7 @@ function toggleSingleEdit() {
 		const c = CHUNK_DATA.find(x => x.index === 0);
 		if (c) c.text = ta.value.trim();
 		btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit';
-		showToast('Text updated');
+		showToast(t('toast_text_updated', 'Text updated'));
 	}
 }
 
@@ -1592,7 +1612,7 @@ async function retrySingle() {
 /* Chunk rendering */
 function renderChunks(chunks) {
 	if (!chunks || chunks.length === 0) {
-		chunkList.innerHTML = '<div class="no-chunks">No segments yet. Generate audio to begin.</div>';
+		chunkList.innerHTML = `<div class="no-chunks">${t('no_segments_yet', 'No segments yet. Generate audio to begin.')}</div>`;
 		chunkCount.textContent = '';
 		chunkPagination.style.display = 'none';
 		mergeSection.classList.add('hidden');
@@ -1606,7 +1626,7 @@ function renderChunks(chunks) {
 	const warningCount = chunks.filter(c => c.warning).length;
 	const errorCount = chunks.filter(c => c.status === 'error').length;
 
-	chunkCount.textContent = `(${chunks.length} segments · ${doneCount} done${warningCount > 0 ? ` · ${warningCount} ⚠` : ''}${errorCount > 0 ? ` · ${errorCount} ✗` : ''})`;
+	chunkCount.textContent = `(${chunks.length} ${t('unit_segments', 'segments')} · ${doneCount} ${t('filter_done', 'done')}${warningCount > 0 ? ` · ${warningCount} ⚠` : ''}${errorCount > 0 ? ` · ${errorCount} ✗` : ''})`;
 
 	// Show filters and batch actions when multiple chunks
 	if (chunks.length > 1) {
@@ -1636,7 +1656,7 @@ function renderChunks(chunks) {
 		chunkList.innerHTML = `
       <div class="card" style="margin:0;padding:16px;background:var(--bg-primary);border-radius:var(--radius-md);min-height:200px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Generated Audio</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">${t('generated_audio', 'Generated Audio')}</span>
           <div style="display:flex;gap:6px;">
             ${isDone ? `<button class="btn-sm" id="singleEditBtn" onclick="toggleSingleEdit()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1650,7 +1670,7 @@ function renderChunks(chunks) {
         </div>
         <div id="singleTextDisplay" style="width:100%;min-height:120px;font-size:13px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:10px;color:var(--text-primary);white-space:pre-wrap;word-break:break-word;">${escapeHtml(c.text)}</div>
         <textarea id="singleTextEdit" style="display:none;width:100%;min-height:120px;font-size:13px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:10px;color:var(--text-primary);font-family:inherit;resize:vertical;outline:none;">${escapeHtml(c.text)}</textarea>
-        ${isDone ? `<div style="margin-top:12px;text-align:center;color:var(--text-muted);font-size:13px;">✓ Audio ready — see Final Audio bar below</div>` : `
+        ${isDone ? `<div style="margin-top:12px;text-align:center;color:var(--text-muted);font-size:13px;">${t('audio_ready_hint', '✓ Audio ready — see Final Audio bar below')}</div>` : `
         <div style="margin-top:12px;text-align:center;color:var(--text-muted);font-size:13px;padding:20px;">
           ${isProcessing ? '<span style="display:inline-block;width:12px;height:12px;border:2px solid var(--card-border);border-top-color:var(--accent-primary);border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span>Generating...' : 'Queued...'}
         </div>`}
@@ -1702,19 +1722,19 @@ function renderChunks(chunks) {
         </div>
         <div class="chunk-body" id="chunkBody_${c.index}">
           ${chunks.length > 1 ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-            <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;font-weight:600;">Voice:</span>
+            <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;font-weight:600;">${t('label_voice', 'Voice:')}</span>
             <select id="chunkVoice_${c.index}" onchange="updateChunkVoice(${c.index},this.value)" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
               ${_voiceOptGroups(CURRENT_VOICE_MODE, c.voice_id || CURRENT_VOICE_ID, '', '')}
             </select>
             <select id="chunkVoiceGender_${c.index}" onchange="_refreshChunkVoices(${c.index})" style="padding:5px 6px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:11px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-              <option value="">Gender</option>
-              <option value="male">♂ Male</option>
-              <option value="female">♀ Female</option>
+              <option value="">${t('filter_gender', 'Gender')}</option>
+              <option value="male">♂ ${t('gender_male', 'Male')}</option>
+              <option value="female">♀ ${t('gender_female', 'Female')}</option>
             </select>
             <select id="chunkVoiceType_${c.index}" onchange="_refreshChunkVoices(${c.index})" style="padding:5px 6px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:11px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-              <option value="">Type</option>
-              <option value="clone">Clone</option>
-              <option value="default">Default</option>
+              <option value="">${t('filter_type', 'Type')}</option>
+              <option value="clone">${t('type_clone', 'Clone')}</option>
+              <option value="default">${t('type_default', 'Default')}</option>
             </select>
           </div>` : ''}
           <textarea id="chunkText_${c.index}" readonly>${escapeHtml(c.text)}</textarea>
@@ -1850,10 +1870,10 @@ function downloadChunk(index) {
 
 function downloadAllChunks() {
 	const done = CHUNK_DATA.filter(c => c.status === 'done' && c.audio_url);
-	if (done.length === 0) { showToast('No segments to download'); return; }
+	if (done.length === 0) { showToast(t('toast_no_seg_download', 'No segments to download')); return; }
 	if (typeof JSZip !== 'undefined') {
 		const zip = new JSZip();
-		showToast('Preparing zip...');
+		showToast(t('toast_prep_zip', 'Preparing zip...'));
 		Promise.all(done.map(async c => {
 			try {
 				const res = await fetch(`${API_BASE}${c.audio_url}&format=wav`);
@@ -1903,8 +1923,8 @@ function _voiceOptGroups(mode, selectedId, genderFilter, typeFilter) {
 		return `<option value="${v.id}"${sel}>${g}${escapeHtml(v.label)}</option>`;
 	};
 	let html = '';
-	if (clones.length) html += `<optgroup label="\u2605 Clone Voices">${clones.map(opt).join('')}</optgroup>`;
-	if (defaults.length) html += `<optgroup label="Default Voices">${defaults.map(opt).join('')}</optgroup>`;
+	if (clones.length) html += `<optgroup label="\u2605 ${t('clone_voices', 'Clone Voices')}">${clones.map(opt).join('')}</optgroup>`;
+	if (defaults.length) html += `<optgroup label="${t('default_voices', 'Default Voices')}">${defaults.map(opt).join('')}</optgroup>`;
 	return html;
 }
 
@@ -2048,7 +2068,7 @@ async function saveDictRow(type, idx) {
 		if (!res.ok) throw new Error('Save failed');
 		const data = await res.json();
 		renderDictTable(type === 'acronyms' ? 'acroBody' : 'wordBody', data.entries, type);
-		showToast('Saved');
+		showToast(t('toast_saved', 'Saved'));
 	} catch (e) { showToast('Error: ' + e.message); }
 }
 
@@ -2059,7 +2079,7 @@ async function deleteDictRow(type, key) {
 		if (!res.ok) throw new Error('Delete failed');
 		const data = await res.json();
 		renderDictTable(type === 'acronyms' ? 'acroBody' : 'wordBody', data.entries, type);
-		showToast('Deleted');
+		showToast(t('toast_deleted', 'Deleted'));
 	} catch (e) { showToast('Error: ' + e.message); }
 }
 
@@ -2106,9 +2126,13 @@ cloneSaveBtn.addEventListener('click', async () => {
 		voiceLabModal.classList.add('hidden');
 		await loadVoices();
 		CURRENT_VOICE_ID = data.voice_id;
-		for (const m of ['medium', 'high', 'low']) {
-			if ((ALL_VOICES[m] || []).find(v => v.id === data.voice_id)) {
-				CURRENT_VOICE_MODE = m; break;
+		if (CURRENT_VOICE_MODE !== 'low' && (ALL_VOICES[CURRENT_VOICE_MODE] || []).find(v => v.id === data.voice_id)) {
+			// keep current mode if it supports the cloned voice
+		} else {
+			for (const m of ['turbo', 'medium', 'high']) {
+				if ((ALL_VOICES[m] || []).find(v => v.id === data.voice_id)) {
+					CURRENT_VOICE_MODE = m; break;
+				}
 			}
 		}
 		updateVoiceLabel();
@@ -2128,17 +2152,118 @@ let DL_POLL = null;
 function getResourceIcon(name, size) {
 	if (name === 'f5' || name === 'f5_model')
 		return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`;
+	if (name === 'vieneu' || name === 'turbo')
+		return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 	if (name === 'piper')
 		return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
 	return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${size}px;height:${size}px;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
 }
 
 function getResourceEngineLabel(name) {
+	if (name === 'vieneu' || name === 'turbo') return 'Medium-Low · 20 voices · 48kHz';
 	if (name === 'piper') return 'CPU · 15 voices';
 	if (name === 'f5') return 'GPU · ~1.4GB';
-	if (name === 'f5_voices') return 'Reference audio';
+	if (name === 'f5_voices') return 'Voice Cloning References';
 	if (name === 'omnivoice') return 'GPU · ~2.3GB';
 	return 'GPU';
+}
+
+
+// ─── Resource Storage Location Handlers ───
+
+let DEFAULT_RESOURCE_DIR = '';
+
+async function loadResourceSettings() {
+	try {
+		const res = await fetch(`${API_BASE}/tts/settings`);
+		if (!res.ok) return;
+		const data = await res.json();
+		DEFAULT_RESOURCE_DIR = data.default_resource_dir || '';
+		const input = document.getElementById('resourceStorageInput') || document.getElementById('resourceDirInput');
+		if (input) input.value = data.resource_dir || '';
+		const chk = document.getElementById('useMirrorCheckbox');
+		if (chk) chk.checked = !!data.use_mirror;
+	} catch (e) {
+		console.warn('Failed to fetch resource settings:', e);
+	}
+}
+
+async function toggleMirrorSpeed(enabled) {
+	try {
+		const res = await fetch(`${API_BASE}/tts/settings`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ use_mirror: enabled })
+		});
+		if (!res.ok) throw new Error('Failed to update mirror setting');
+		showToast(enabled ? (t('toast_mirror_enabled') || 'Đã bật Mirror tăng tốc (hf-mirror.com)') : (t('toast_mirror_disabled') || 'Đã tắt Mirror tăng tốc'));
+	} catch (e) {
+		showToast('Lỗi: ' + e.message);
+	}
+}
+
+async function saveResourceDir() {
+	const input = document.getElementById('resourceStorageInput') || document.getElementById('resourceDirInput');
+	if (!input) return;
+	const newPath = input.value.trim();
+	if (!newPath) {
+		showToast(t('error_empty_path') || 'Vui lòng nhập đường dẫn thư mục!');
+		return;
+	}
+	try {
+		const res = await fetch(`${API_BASE}/tts/settings`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ resource_dir: newPath }),
+		});
+		if (!res.ok) throw new Error('Save failed');
+		const data = await res.json();
+		input.value = data.resource_dir;
+		showToast(t('toast_storage_updated') || 'Đã cập nhật nơi lưu tài nguyên!');
+		loadDownloadTab();
+		loadVoices();
+	} catch (e) {
+		showToast('Lỗi: ' + e.message);
+	}
+}
+const saveResourceFolder = saveResourceDir;
+
+async function openResourceDirFolder() {
+	try {
+		await fetch(`${API_BASE}/tts/open_folder`, { method: 'POST' });
+	} catch (e) {
+		showToast('Không thể mở thư mục: ' + e.message);
+	}
+}
+
+async function resetResourceDirDefault() {
+	if (DEFAULT_RESOURCE_DIR) {
+		const input = document.getElementById('resourceStorageInput') || document.getElementById('resourceDirInput');
+		if (input) input.value = DEFAULT_RESOURCE_DIR;
+		saveResourceDir();
+	}
+}
+const resetResourceFolder = resetResourceDirDefault;
+
+async function openTargetResourceFolder(rid) {
+	try {
+		const res = await fetch(`${API_BASE}/tts/open_resource_folder`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ resource_id: rid })
+		});
+		if (!res.ok) throw new Error('Failed to open folder');
+		showToast(t('toast_folder_opened') || 'Đã mở thư mục');
+	} catch (e) {
+		showToast('Không thể mở thư mục: ' + e.message);
+	}
+}
+
+function toggleManualGuide(rid) {
+	const box = document.getElementById('manualGuide_' + rid);
+	if (!box) return;
+	const isHidden = (box.style.display === 'none' || !box.style.display);
+	box.style.display = isHidden ? 'block' : 'none';
 }
 
 // ─── Resource Tab: Download ───
@@ -2147,13 +2272,20 @@ async function loadDownloadTab() {
 	const container = document.getElementById('resourceDownloadTab');
 	container.innerHTML = '<div class="no-chunks" style="padding:20px;">Loading...</div>';
 	try {
-		const [cat, dl] = await Promise.all([
-			fetch(`${API_BASE}/tts/resource_catalog`).then(r => r.json()),
-			fetch(`${API_BASE}/tts/download_progress`).then(r => r.json()),
+		const [resCat, resDl] = await Promise.all([
+			fetch(`${API_BASE}/tts/resource_catalog`),
+			fetch(`${API_BASE}/tts/download_progress`),
 		]);
+		if (!resCat.ok) {
+			const err = await resCat.json().catch(() => ({}));
+			throw new Error(err.detail || `Server error (${resCat.status})`);
+		}
+		const cat = await resCat.json();
+		const dl = await resDl.json().catch(() => ({}));
+		if (!Array.isArray(cat)) throw new Error('Invalid catalog format');
 		renderDownloadTab(cat, dl);
 	} catch (e) {
-		container.innerHTML = '<div class="no-chunks" style="padding:20px;color:var(--error);">Failed to load catalog. Is the server running?</div>';
+		container.innerHTML = `<div class="no-chunks" style="padding:20px;color:var(--error);">Failed to load catalog: ${escapeHtml(e.message)}</div>`;
 	}
 }
 
@@ -2167,13 +2299,13 @@ function renderDownloadTab(catalog, dlState) {
 
 		let btnHtml = '';
 		if (downloading) {
-			btnHtml = `<button class="resource-btn" disabled>Downloading…</button>`;
+			btnHtml = `<button class="resource-btn" disabled>${t('btn_downloading', 'Downloading…')}</button>`;
 		} else if (done) {
-			btnHtml = `<button class="resource-btn" disabled style="background:var(--success);border-color:var(--success);">&#10003; Downloaded</button>`;
+			btnHtml = `<button class="resource-btn" disabled style="background:var(--success);border-color:var(--success);">&#10003; ${t('btn_downloaded', 'Downloaded')}</button>`;
 		} else if (error) {
-			btnHtml = `<button class="resource-btn" onclick="startDownload('${r.id}')" style="background:var(--error);border-color:var(--error);">Retry</button>`;
+			btnHtml = `<button class="resource-btn" onclick="startDownload('${r.id}')" style="background:var(--error);border-color:var(--error);">${t('btn_retry', 'Retry')}</button>`;
 		} else {
-			btnHtml = `<button class="resource-btn" onclick="startDownload('${r.id}')">Download (${r.total_size_mb}MB)</button>`;
+			btnHtml = `<button class="resource-btn" onclick="startDownload('${r.id}')">${t('btn_download', 'Download')} (${r.total_size_mb}MB)</button>`;
 		}
 
 		let progressHtml = '';
@@ -2188,14 +2320,39 @@ function renderDownloadTab(catalog, dlState) {
 		}
 
 		const cardClass = done ? 'loaded' : downloading ? 'loading' : error ? 'error' : '';
-		return `<div class="resource-card ${cardClass}">
-      ${getResourceIcon(r.id, 22)}
-      <div class="resource-info">
-        <div class="resource-name">${escapeHtml(r.label)}</div>
-        <div class="resource-engine">${getResourceEngineLabel(r.id)} · ${r.total_size_mb}MB · ${r.existing_files}/${r.total_files} files</div>
-        ${progressHtml}
+		const manualBtn = `<button class="resource-btn" onclick="toggleManualGuide('${r.id}')" style="background:var(--bg-secondary);color:var(--text-primary);border-color:var(--card-border);padding:6px 10px;font-size:12px;margin-left:6px;" title="${t('btn_manual_download', 'Tải thủ công')}">📥 ${t('btn_manual_download', 'Tải thủ công')}</button>`;
+
+		const guideBox = `
+      <div id="manualGuide_${r.id}" class="manual-guide-box" style="display:none;margin-top:10px;padding:10px 12px;background:var(--card-bg);border:1px dashed var(--card-border);border-radius:6px;font-size:12px;line-height:1.6;">
+        <div style="font-weight:600;color:var(--text-primary);margin-bottom:4px;">${t('manual_guide_title', 'Hướng dẫn tải thủ công:')}</div>
+        <div style="margin-bottom:4px;">
+          <strong>1.</strong> ${t('manual_step_link', 'Tải trực tiếp bằng trình duyệt hoặc IDM tại:')}
+          <a href="${escapeHtml(r.repo_url || '')}" target="_blank" style="color:var(--accent-primary);text-decoration:underline;margin-left:4px;word-break:break-all;">${escapeHtml(r.repo_url || '')}</a>
+        </div>
+        <div style="margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span><strong>2.</strong> ${t('manual_step_dir', 'Chép các file vào thư mục:')}</span>
+          <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;border:1px solid var(--card-border);font-family:monospace;font-size:11px;">${escapeHtml(r.target_dir || '')}</code>
+          <button class="btn-sm" onclick="openTargetResourceFolder('${r.id}')" style="padding:2px 8px;font-size:11px;cursor:pointer;">📂 ${t('btn_open_target_dir', 'Mở thư mục')}</button>
+        </div>
+        <div>
+          <strong>3.</strong> ${t('manual_step_done', 'Sau khi chép xong, bấm')} <button class="btn-sm" onclick="loadDownloadTab()" style="padding:2px 8px;font-size:11px;cursor:pointer;">🔄 ${t('btn_recheck', 'Kiểm tra lại')}</button> ${t('manual_step_recheck', 'để hệ thống ghi nhận.')}
+        </div>
+      </div>`;
+
+		return `<div class="resource-card ${cardClass}" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${getResourceIcon(r.id, 22)}
+        <div class="resource-info" style="flex:1;">
+          <div class="resource-name">${escapeHtml(r.label)}</div>
+          <div class="resource-engine">${getResourceEngineLabel(r.id)} · ${r.total_size_mb}MB · ${r.existing_files}/${r.total_files} files</div>
+          ${progressHtml}
+        </div>
+        <div style="display:flex;align-items:center;">
+          ${btnHtml}
+          ${manualBtn}
+        </div>
       </div>
-      ${btnHtml}
+      ${guideBox}
     </div>`;
 	}).join('') || '<div class="no-chunks">No resources available</div>';
 }
@@ -2204,10 +2361,6 @@ function renderDownloadTab(catalog, dlState) {
 
 async function loadModelsTab() {
 	const container = document.getElementById('resourceModelsTab');
-	if (APP_MODE === 'cpu') {
-		container.innerHTML = '';
-		return;
-	}
 	container.innerHTML = '<div class="no-chunks" style="padding:20px;">Loading...</div>';
 	try {
 		const res = await fetch(`${API_BASE}/tts/model_status`);
@@ -2220,14 +2373,16 @@ async function loadModelsTab() {
 
 function renderModelsTab(ms) {
 	const container = document.getElementById('resourceModelsTab');
-	if (APP_MODE === 'cpu' || (ms && ms.mode === 'cpu')) {
-		container.innerHTML = '';
-		return;
+	const engines = [];
+	engines.push({
+		key: 'turbo',
+		label: 'VieNeu-TTS (Medium-Low · 48kHz' + (APP_MODE === 'cpu' ? ' ONNX)' : ')'),
+		state: (ms && (ms.turbo || ms.vieneu)) || {}
+	});
+	if (APP_MODE !== 'cpu' && (!ms || ms.mode !== 'cpu')) {
+		engines.push({ key: 'f5', label: 'F5-TTS (Medium · GPU)', state: (ms && ms.f5) || {} });
+		engines.push({ key: 'omnivoice', label: 'OmniVoice (High · GPU)', state: (ms && ms.omnivoice) || {} });
 	}
-	const engines = [
-		{ key: 'f5', label: 'F5-TTS (Medium · GPU)', state: (ms && ms.f5) || {} },
-		{ key: 'omnivoice', label: 'OmniVoice (High · GPU)', state: (ms && ms.omnivoice) || {} },
-	];
 
 	container.innerHTML = engines.map(e => {
 		const s = e.state;
@@ -2264,7 +2419,7 @@ function renderModelsTab(ms) {
 // ─── Tab Switching ───
 
 function switchResourceTab(tab) {
-	if (APP_MODE === 'cpu' && tab === 'models') tab = 'download';
+	// models tab is available in both CPU and GPU
 	document.querySelectorAll('#resourceModal .dict-tab').forEach(b => b.classList.toggle('active', b.dataset.rtab === tab));
 	document.getElementById('resourceDownloadTab').classList.toggle('hidden', tab !== 'download');
 	document.getElementById('resourceModelsTab').classList.toggle('hidden', tab !== 'models');
@@ -2316,7 +2471,6 @@ function stopDownloadPoll() {
 // ─── Model Load ───
 
 async function loadModel(model) {
-	if (APP_MODE === 'cpu') return;
 	try {
 		const res = await fetch(`${API_BASE}/tts/load_model`, {
 			method: 'POST',
@@ -2337,19 +2491,19 @@ async function loadModel(model) {
 }
 
 function startModelPoll() {
-	if (APP_MODE === 'cpu') return;
 	stopModelPoll();
 	RESOURCE_POLL = setInterval(async () => {
 		try {
 			const res = await fetch(`${API_BASE}/tts/model_status`);
 			const data = await res.json();
 			renderModelsTab(data);
-			if (!data.f5.loading && !data.omnivoice.loading) {
+			const turboLoading = data.turbo ? data.turbo.loading : false;
+			const f5Loading = data.f5 ? data.f5.loading : false;
+			const omniLoading = data.omnivoice ? data.omnivoice.loading : false;
+			if (!turboLoading && !f5Loading && !omniLoading) {
 				stopModelPoll();
-				if (data.f5.loaded || data.omnivoice.loaded) {
-					await loadVoices();
-					showToast('Model loaded!');
-				}
+				await loadVoices();
+				showToast('Model loaded!');
 			}
 		} catch (e) { stopModelPoll(); }
 	}, 800);
@@ -2362,11 +2516,12 @@ function stopModelPoll() {
 // ─── Open / Close ───
 
 async function openResourceModal() {
+	loadResourceSettings();
 	stopDownloadPoll(); stopModelPoll();
 	document.getElementById('resourceModal').classList.remove('hidden');
 	// Activate download tab by default
 	const active = document.querySelector('#resourceModal .dict-tab.active');
-	switchResourceTab(APP_MODE === 'cpu' ? 'download' : (active ? active.dataset.rtab : 'download'));
+	switchResourceTab(active ? active.dataset.rtab : 'download');
 }
 
 document.getElementById('resourceBtn').addEventListener('click', openResourceModal);
@@ -2424,6 +2579,61 @@ document.addEventListener('keydown', e => {
 	}
 });
 
-updateCharCount(); updateSplitCheckbox(); updateModelConfig();
+
+/* Inline Dict & Normalize State Controller */
+function updateNormalizeState() {
+	const cb = document.getElementById('normalizeCheckbox');
+	const inlineBtn = document.getElementById('inlineDictBtn');
+	const hint = document.getElementById('normalizeHint');
+	if (!cb) return;
+
+	if (cb.checked) {
+		if (inlineBtn) inlineBtn.style.display = 'inline-flex';
+		if (hint) {
+			hint.textContent = t('hint_normalize', 'Converts numbers, dates, currencies & abbreviations to spoken words');
+			hint.style.color = 'var(--text-muted)';
+		}
+	} else {
+		if (inlineBtn) inlineBtn.style.display = 'none';
+		if (hint) {
+			hint.textContent = t('hint_normalize_off', '(Disabled — Dictionary and number reading rules will not apply)');
+			hint.style.color = 'var(--text-muted)';
+		}
+	}
+}
+
+document.getElementById('normalizeCheckbox')?.addEventListener('change', updateNormalizeState);
+document.addEventListener('languagechange', updateNormalizeState);
+document.getElementById('inlineDictBtn')?.addEventListener('click', () => {
+	loadDict();
+	document.getElementById('dictModal').classList.remove('hidden');
+	document.querySelector('#dictModal .dict-tab[data-tab=acronyms]').click();
+});
+
+updateCharCount(); updateSplitCheckbox(); updateModelConfig(); updateNormalizeState();
 loadAppMode().finally(() => loadVoices());
 fetch(`${API_BASE}/tts/pause_config`).then(r => r.json()).then(c => { PAUSE_CFG = c; updateCharCount(); }).catch(() => { });
+
+
+// Language switcher event listener
+document.getElementById('langBtn')?.addEventListener('click', () => {
+	toggleLanguage();
+});
+
+
+// Mastering toggle in Final Audio bar
+document.getElementById('masteringToggle')?.addEventListener('click', function() {
+	const panel = document.getElementById('masteringPanel');
+	panel.classList.toggle('hidden');
+	this.classList.toggle('open');
+});
+
+
+document.getElementById('applyMasteringBtn')?.addEventListener('click', async () => {
+	if (!CURRENT_TASK_ID) return;
+	const btn = document.getElementById('applyMasteringBtn');
+	if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+	await doMerge();
+	if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+	showToast(t('toast_remerged', 'Re-merged audio with selected mastering options'));
+});

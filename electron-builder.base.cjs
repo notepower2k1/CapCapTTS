@@ -24,8 +24,20 @@ module.exports = function makeConfig(mode) {
     files: ['electron/**/*', 'package.json'],
     extraResources: resources,
     asar: true,
-    win: { target: [{ target: 'nsis', arch: ['x64'] }] },
-    nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
+    win: {
+      icon: 'frontend/capcap.ico',
+      target: [{ target: 'nsis', arch: ['x64'] }],
+    },
+    nsis: {
+      oneClick: false,
+      allowToChangeInstallationDirectory: true,
+      installerIcon: 'frontend/capcap.ico',
+      uninstallerIcon: 'frontend/capcap.ico',
+      installerHeaderIcon: 'frontend/capcap.ico',
+      createDesktopShortcut: true,
+      createStartMenuShortcut: true,
+      shortcutName: `CapCap TTS ${mode.toUpperCase()}`,
+    },
     extraMetadata: { main: `electron/main-${mode}.cjs` },
   };
 };

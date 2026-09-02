@@ -22,6 +22,17 @@ function appRoot() {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..');
 }
 
+function getAppIcon() {
+  const root = appRoot();
+  const candidates = [
+    path.join(root, 'frontend', 'capcap.ico'),
+    path.join(root, 'frontend', 'capcap.png'),
+    path.join(__dirname, '..', 'frontend', 'capcap.ico'),
+    path.join(__dirname, '..', 'frontend', 'capcap.png'),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || undefined;
+}
+
 function firstExisting(paths, fallback) {
   return paths.find((candidate) => fs.existsSync(candidate)) || fallback;
 }
@@ -51,6 +62,7 @@ function createSetupWindow(mode) {
     height: 340,
     resizable: false,
     show: false,
+    icon: getAppIcon(),
     title: `CapCap TTS ${mode.toUpperCase()} - setup`,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
@@ -345,6 +357,7 @@ async function createWindow() {
       height: 950,
       minWidth: 1000,
       minHeight: 700,
+      icon: getAppIcon(),
       title: `CapCap TTS · ${mode.toUpperCase()}`,
       webPreferences: {
         contextIsolation: true,

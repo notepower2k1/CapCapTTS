@@ -228,19 +228,23 @@ def get_chunk_config(engine_type: str) -> dict:
     return dict(_CHUNK_ENGINE_PRESETS.get(engine_type, _CHUNK_ENGINE_PRESETS["low"]))
 
 
-def merge_audio_segments(segments: list[AudioSegment]) -> AudioSegment:
+def merge_audio_segments(segments: list[AudioSegment], crossfade_ms: int = CROSS_FADE_MS) -> AudioSegment:
     if not segments:
         return AudioSegment.silent(duration=0)
     result = segments[0]
     for seg in segments[1:]:
-        result = result.append(seg, crossfade=CROSS_FADE_MS)
+        result = result.append(seg, crossfade=crossfade_ms)
     return result
 
 
 class PiperEngine:
     def __init__(self):
         self._voices: dict[str, PiperVoice] = {}
-        self._models_dir = PIPER_DIR
+        p_new = PIPER_DIR.parent / "piper-new"
+        if p_new.exists() and any(p_new.glob("*.onnx")):
+            self._models_dir = p_new
+        else:
+            self._models_dir = PIPER_DIR
         self._meta = self._load_meta()
 
     def _load_meta(self) -> dict:
@@ -306,6 +310,242 @@ class PiperEngine:
             )
             segments.append(seg)
         return merge_audio_segments(segments)
+
+
+
+VIENEU_VOICE_META = {
+    "Minh Đức": {
+        "name": "Minh Đức",
+        "gender": "male",
+        "desc": "Nam · Miền Bắc · Phong cách tin tức, phóng sự",
+    },
+    "Phạm Tuyên": {
+        "name": "Phạm Tuyên",
+        "gender": "male",
+        "desc": "Nam · Miền Bắc · Trầm ấm, đối thoại tự nhiên",
+    },
+    "Thái Sơn": {
+        "name": "Thái Sơn",
+        "gender": "male",
+        "desc": "Nam · Miền Nam · Phong cách kể chuyện, podcast",
+    },
+    "Xuân Vĩnh": {
+        "name": "Xuân Vĩnh",
+        "gender": "male",
+        "desc": "Nam · Miền Nam · Giọng ấm, dẫn chuyện tự nhiên",
+    },
+    "Thanh Bình": {
+        "name": "Thanh Bình",
+        "gender": "male",
+        "desc": "Nam · Miền Bắc · Truyền cảm, kể chuyện, sách nói",
+    },
+    "Trúc Ly": {
+        "name": "Trúc Ly",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Giọng trẻ, nhẹ nhàng, tự nhiên",
+    },
+    "Ngọc Linh": {
+        "name": "Ngọc Linh",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Phong cách kể chuyện, diễn cảm",
+    },
+    "Đoan Trang": {
+        "name": "Đoan Trang",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Trong trẻo, đối thoại tự nhiên",
+    },
+    "Mai Anh": {
+        "name": "Mai Anh",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Dõng dạc, phong cách bản tin",
+    },
+    "Thục Đoan": {
+        "name": "Thục Đoan",
+        "gender": "female",
+        "desc": "Nữ · Miền Nam · Ngọt ngào, kể chuyện, radio",
+    },
+    "Minh Triết": {
+        "name": "Minh Triết",
+        "gender": "male",
+        "desc": "Nam · Miền Nam · Chững chạc, đọc tin tức, thời sự",
+    },
+    "Thùy Dung": {
+        "name": "Thùy Dung",
+        "gender": "female",
+        "desc": "Nữ · Miền Nam · Lưu loát, đọc tin tức, phóng sự",
+    },
+    "Quang Sơn": {
+        "name": "Quang Sơn",
+        "gender": "male",
+        "desc": "Nam · Miền Trung · Giọng miền Trung ấm áp, tự nhiên",
+    },
+    "Ngọc Trân": {
+        "name": "Ngọc Trân",
+        "gender": "female",
+        "desc": "Nữ · Miền Trung · Dịu dàng, giọng Trung truyền cảm",
+    },
+    "Mỹ Duyên": {
+        "name": "Mỹ Duyên",
+        "gender": "female",
+        "desc": "Nữ · Miền Nam · Đọc truyện, sâu lắng, audiobook",
+    },
+    "Quỳnh Anh": {
+        "name": "Quỳnh Anh",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Đọc truyện, diễn cảm, tâm sự",
+    },
+    "Đức Trí": {
+        "name": "Đức Trí",
+        "gender": "male",
+        "desc": "Nam · Miền Nam · Trầm hùng, đọc truyện, thuyết minh",
+    },
+    "Kim Thanh": {
+        "name": "Kim Thanh",
+        "gender": "female",
+        "desc": "Nữ · Miền Nam · Diễn cảm, đọc truyện, tiểu thuyết",
+    },
+    "Ngọc Huyền": {
+        "name": "Ngọc Huyền",
+        "gender": "female",
+        "desc": "Nữ · Miền Bắc · Giọng đọc tự nhiên, đời thường",
+    },
+    "Adam": {
+        "name": "Adam",
+        "gender": "male",
+        "desc": "Nam · Miền Nam · Giọng trẻ, năng động, tự nhiên",
+    }
+}
+
+class VieneuEngine:
+    def __init__(self):
+        self._model = None
+        self._preset_voices = []
+        self._loaded = False
+
+    def load(self, progress_callback=None):
+        if self._loaded and self._model is not None:
+            return
+        if progress_callback:
+            progress_callback("Loading VieNeu ONNX models...", 30)
+        from vieneu import Vieneu
+        self._model = Vieneu(backend="onnx")
+        if progress_callback:
+            progress_callback("Reading preset voices...", 80)
+        raw = self._model.list_preset_voices()
+        res = []
+        for full_name, vid in raw:
+            meta = VIENEU_VOICE_META.get(vid)
+            if meta:
+                display_name = meta["name"]
+                gender = meta["gender"]
+                desc = meta["desc"]
+            else:
+                parts = [p.strip() for p in full_name.split("—")]
+                display_name = parts[0] if parts else vid
+                desc = parts[1] if len(parts) > 1 else full_name
+                gender = "female" if "Nữ" in full_name else "male"
+            res.append({
+                "id": vid,
+                "label": display_name,
+                "engine": "vieneu",
+                "gender": gender,
+                "description": desc,
+                "rate": 20,
+                "is_preset": True,
+            })
+        self._preset_voices = res
+        self._loaded = True
+        if progress_callback:
+            progress_callback("Loaded", 100)
+
+    def list_voices(self, include_rate=False) -> list[dict]:
+        if not self._loaded:
+            return []
+        if not self._preset_voices:
+            self.load()
+
+        # 1. Preset voices
+        result = []
+        for p in self._preset_voices:
+            item = dict(p)
+            if include_rate:
+                item["rate"] = 20
+            result.append(item)
+
+        # 2. Cloned voices from shared voices_dir
+        from config import get_voices_dir
+        vdir = get_voices_dir()
+        meta_file = vdir / "voices.json"
+        if meta_file.exists():
+            import json
+            try:
+                entries = json.loads(meta_file.read_text(encoding="utf-8"))
+                for e in entries:
+                    vid = Path(e.get("audio_path", "")).stem
+                    item = {
+                        "id": vid,
+                        "label": e.get("name", vid.replace("_", " ").title()),
+                        "engine": "vieneu",
+                        "gender": e.get("gender", "male"),
+                        "description": e.get("description", ""),
+                        "is_clone": True,
+                    }
+                    if include_rate:
+                        item["rate"] = 20
+                    result.append(item)
+            except Exception as err:
+                print(f"Error reading custom voices for Vieneu: {err}")
+        return result
+
+    def synthesize(self, text: str, voice_id: str, speed: float = 1.0, ref_audio: str = None, ref_text: str = None) -> AudioSegment:
+        if not self._loaded or self._model is None:
+            raise RuntimeError("VieNeu-TTS model is not loaded. Please load it first in Resources -> Load Models.")
+        m = self._model
+
+        # Check if voice_id is preset or custom clone
+        preset_ids = {p["id"] for p in self._preset_voices}
+        if voice_id in preset_ids:
+            audio_data = m.infer(text, voice=voice_id)
+        else:
+            from config import get_voices_dir
+            vdir = get_voices_dir()
+            actual_audio = ref_audio
+            actual_text = ref_text
+            if not actual_audio:
+                for ext in (".wav", ".mp3"):
+                    p = vdir / f"{voice_id}{ext}"
+                    if p.exists():
+                        actual_audio = str(p)
+                        break
+            if not actual_text:
+                meta_file = vdir / "voices.json"
+                if meta_file.exists():
+                    import json
+                    try:
+                        entries = json.loads(meta_file.read_text(encoding="utf-8"))
+                        for e in entries:
+                            if Path(e.get("audio_path", "")).stem == voice_id:
+                                actual_text = e.get("text_ref", "")
+                                break
+                    except Exception:
+                        pass
+            if not actual_audio:
+                audio_data = m.infer(text, voice="Adam")
+            else:
+                audio_data = m.infer(text, ref_audio=actual_audio, ref_text=actual_text)
+
+        import io
+        import soundfile as sf
+        buf = io.BytesIO()
+        sf.write(buf, audio_data, 48000, format='WAV')
+        buf.seek(0)
+        seg = AudioSegment.from_file(buf, format='wav')
+
+        if speed != 1.0 and 0.5 <= speed <= 2.0:
+            new_frame_rate = int(seg.frame_rate * speed)
+            seg = seg._spawn(seg.raw_data, overrides={"frame_rate": new_frame_rate}).set_frame_rate(seg.frame_rate)
+
+        return seg
 
 
 class TaskManager:

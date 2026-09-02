@@ -1,364 +1,142 @@
-# CapCap TTS — Vietnamese Text-to-Speech
+# CapCap TTS — Bộ Chuyển Đổi Văn Bản Thành Giọng Nói Tiếng Việt
 
-> **100% Free · 100% Local · No API Keys · No Cloud · No Limits**
+<p align="center">
+  <a href="README_EN.md">English</a> | <b>Tiếng Việt</b>
+</p>
 
-A self-hosted Vietnamese Text-to-Speech tool that runs entirely on your machine. No subscriptions, no usage quotas, no data sent to external servers. Your text and audio never leave your computer.
+> **100% Miễn phí · Chạy 100% Offline trên máy · Không cần API Key · Không giới hạn**
 
-![CapCap TTS UI](./screenshot.png)
+Ứng dụng desktop và web service chuyển đổi văn bản thành giọng nói tiếng Việt tự lưu trữ (Self-hosted). Chạy hoàn toàn cục bộ trên máy tính, bảo mật tuyệt đối, không gửi bất kỳ dữ liệu nào ra bên ngoài.
 
-## Why Local & Free?
+![Giao diện CapCap TTS](./screenshot.png)
 
-| | Cloud TTS (Google, Azure, etc.) | CapCap TTS |
+---
+
+## 4 Phân Hạng Giọng Đọc
+
+| Phân hạng | Mô hình | Tần số mẫu | Tốc độ | Chất lượng | Yêu cầu phần cứng |
+|---|---|:---:|:---:|:---:|---|
+| **Thấp (Low)** | **Piper** | 22.05 kHz | ⚡⚡⚡ Cực nhanh | Khá | Mọi CPU |
+| **Trung bình-Thấp (Medium-Low)** | **VieNeu-TTS** | **48.0 kHz** | ⚡⚡ Nhanh | Rất tốt (Truyền cảm) | CPU hoặc GPU |
+| **Trung bình (Medium)** | **F5-TTS** | 24.0 kHz | ⚡ Trung bình | Xuất sắc (Clone giọng) | GPU NVIDIA (4GB+) |
+| **Cao (High)** | **OmniVoice** | 24.0 kHz | ⏳ Chậm | Tốt nhất | GPU NVIDIA (6GB+) |
+
+- **Piper**: 25 giọng đọc vùng miền (Bắc, Trung, Nam).
+- **VieNeu**: 20 giọng mặc định (10 Nam, 10 Nữ) + hỗ trợ Clone giọng.
+- **F5-TTS & OmniVoice**: Dùng chung kho giọng mẫu và giọng clone cá nhân.
+
+---
+
+## Các Tính Năng Chính
+
+- **Chuẩn hóa tiếng Việt**: Đọc chuẩn số, ngày tháng, tiền tệ, từ viết tắt qua `vietnormalizer`.
+- **Quản lý & Tải tài nguyên**: Tải tự động 1-click trong app, ⚡ **Mirror tăng tốc (`hf-mirror.com`)**, hướng dẫn tải thủ công kèm nút mở thư mục, tùy chọn ổ đĩa lưu trữ.
+- **Cắt đoạn linh hoạt**: Cắt thông minh (Hybrid - mặc định ghép câu ngắn/tách câu dài), cắt theo câu, hoặc theo đoạn.
+- **Kiểm soát từng câu**: Gán giọng đọc riêng cho từng câu trong bài; tạo lại riêng lẻ từng câu.
+- **Kiểm tra chất lượng tự động**: Phát hiện nuốt tiếng, âm lượng nhỏ, khoảng lặng dài, vỡ tiếng (clipping).
+- **Xử lý hàng loạt (Batch)**: Kéo thả nhiều file `.txt`/`.md` cùng lúc với cấu hình riêng hoặc chung.
+- **Xuất file đa dạng**: Tải từng câu WAV, tải ZIP toàn bộ, ghép thành MP3 (128k/320k), WAV và phụ đề SRT.
+- **Clone giọng nói**: Tạo giọng clone mới chỉ với một file audio mẫu 3–10 giây.
+- **Từ điển & Khoảng nghỉ**: Tự định nghĩa phiên âm từ viết tắt, tiếng nước ngoài và chỉnh độ trễ dấu câu (`[1s]`, `[0.5s]`).
+- **Giao diện Song ngữ & Dark Mode**: Đổi qua lại tức thì giữa Tiếng Việt và Tiếng Anh.
+
+---
+
+## Khuyến Nghị Cấu Hình
+
+| Cấu hình máy | Bản sử dụng | Các phân hạng hỗ trợ |
 |---|---|---|
-| **Cost** | Pay per character / minute | **Free forever** |
-| **Privacy** | Text sent to external servers | **100% local, offline** |
-| **Limits** | Rate limits, quotas, API keys | **Unlimited, no keys needed** |
-| **Internet** | Required | **Not required** |
-| **Voice Cloning** | Expensive or unavailable | **Free with F5-TTS** |
+| **GPU NVIDIA (VRAM từ 6GB trở lên)** | `backend/` (Bản GPU) | Đầy đủ cả 4 phân hạng (Low, Medium-Low, Medium, High) |
+| **GPU NVIDIA (VRAM 4GB)** | `backend/` (Bản GPU) | 3 phân hạng: Low, Medium-Low, Medium |
+| **Chỉ có CPU / MacBook / Card AMD** | `backend_cpu/` (Bản CPU) | 2 phân hạng: Low (Piper) & Medium-Low (VieNeu ONNX) |
 
-## Features
+---
 
-- **Vietnamese-first** — Optimized for Vietnamese text normalization and pronunciation
-- **3 Quality Tiers** — Choose based on your hardware and quality needs:
-  - **Low (Piper)** — Fast, lightweight, CPU-friendly
-  - **Medium (F5-TTS)** — High-quality zero-shot voice cloning, GPU recommended
-  - **High (OmniVoice)** — Best quality, HuggingFace model, GPU required
-- **Shared voice library** — F5 and OmniVoice share the same reference audio & text
-- **Chunk-based generation** — Text always split into segments with hybrid chunking (merge short sentences, split long ones via comma/space); progress tracked per segment
-- **Split mode selector** — Choose sentence-level, paragraph-level, or hybrid (default) chunking
-- **Per-segment voice selection** — Assign different voices to individual segments
-- **Segment quality check** — Auto-detects incomplete speech, low volume, excessive silence, clipping
-- **Segment download** — Download individual segments (WAV), all segments as ZIP, or merged audio (MP3/WAV/SRT)
-- **Voice cloning** — Clone voices with name, gender & description; auto-saved to shared `voices.json`
-- **Voice management** — Browse, filter by gender/type (clone/default), edit description, delete cloned voices
-- **File queue** — Drag & drop multiple `.txt` files, batch process with per-file config (voice, split mode, speed)
-- **Auto-merge** — Multi-segment results automatically merged after generation
-- **Dark mode** — Toggle in header, persists across sessions
-- **Custom dictionary** — Override pronunciation for acronyms and non-Vietnamese words
-- **Pause control** — Adjustable silence after punctuation + custom `[Xs]` markers
-- **History** — Auto-saved generation history with playback
-- **Vietnamese normalization** — Built-in text normalization via `vietnormalizer`
-- **Advanced audio player** — Waveform visualization, real-time seek, ±2s skip, speed control, volume slider, drag seek
+## Hướng Dẫn Cài Đặt & Khởi Chạy
 
-## Segment Quality Check
+### Yêu cầu tiên quyết
+- **Python 3.11+** (đã tích chọn "Add Python to PATH")
+- **FFmpeg** (đã cài đặt và thêm vào PATH hoặc đặt trong `config.py`)
 
-After each audio segment is generated, CapCap automatically evaluates its quality and classifies it:
-
-| Status | Meaning | Can Export | Icon |
-|--------|---------|-----------|------|
-| **done** | Audio is usable, no quality issues | ✅ | Green checkmark |
-| **warning** | Playable but has issues (short duration, low volume, clipping, excessive silence) | ✅ | Yellow warning triangle |
-| **failed** | Audio corrupted, silent, or too short for the input text | ❌ | Red error icon |
-
-**What triggers a warning:**
-- Duration too short/long vs. expected (based on text length)
-- Silence ratio ≥ 45% 
-- Leading silence ≥ 1s or trailing silence ≥ 1.5s
-- RMS < -35dB or peak < -18dB (low volume)
-- Clipping ratio ≥ 0.1%
-- Text > 500 characters per segment
-
-**What triggers a failed status:**
-- Generation error
-- Missing or empty audio file
-- Corrupted audio (decode failure)
-- Zero duration
-- Silence ratio ≥ 98% (full silence)
-- Text ≥ 30 chars but audio < 0.5s
-
-Failed segments block the Merge & Download action. Warning segments can still be exported.
-
-You can click **Download** on any individual segment (always WAV format, lossless).
-
-## Batch Processing
-
-Drag & drop multiple `.txt` files onto the input area to add them to the processing queue:
-
-- **Per-file config** — Click a file to edit its settings (voice, split mode, speed, etc.) in the main UI
-- **Save button** — Save current UI settings as that file's configuration (shows ✓ when saved)
-- **Apply to all** — Copy current UI settings to all pending files at once
-- **Process All** — Process all pending files sequentially with their individual configs
-- **Results** — Click completed files to view segments and play merged audio
-- **Limits** — Max 20 files, empty files are automatically rejected
-
-Each file's audio output is auto-merged (for split mode) and stored in the backend's `outputs/` directory.
-
-## Hardware Recommendation
-
-| Setup | Recommended Version | Notes |
-|-------|---------------------|-------|
-| **GPU (NVIDIA 4GB+)** | `backend/` (GPU version) | All 3 tiers available. OmniVoice needs 4GB+ VRAM. |
-| **GPU (NVIDIA 6GB+)** | `backend/` (GPU version) | Recommended for OmniVoice (High quality). |
-| **CPU only** | `backend_cpu/` (CPU version) | Low tier (Piper) only. Lightweight and fast. |
-| **Mac / AMD** | `backend_cpu/` (CPU version) | F5-TTS and OmniVoice optimized for NVIDIA GPUs. |
-
-### Quality Tiers
-
-| Tier | Engine | Speed | Quality | GPU Required |
-|------|--------|-------|---------|-------------|
-| **Low** | Piper | ⚡⚡ Fast | Good | No |
-| **Medium** | F5-TTS | ⚡⚡ Medium | Very Good | Yes (4GB+) |
-| **High** | OmniVoice | ⚡ Slow | Best | Yes (6GB+) |
-
-> **Recommendation:** Use the **GPU version** if you have an NVIDIA GPU. OmniVoice (High) gives the best quality but is slower. Piper (Low) runs on any machine.
-
-## Prerequisites
-
-### 1. Python 3.11+
-
-Download from [python.org](https://www.python.org/downloads/). Verify installation:
-```bash
-python --version
-```
-
-### 2. FFmpeg (Required)
-
-FFmpeg is used for audio conversion (WAV ↔ MP3). **Must be installed separately.**
-
-**Windows:**
-1. Download FFmpeg from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) (get the "essentials" build)
-2. Extract to a folder (e.g., `D:\ffmpeg`)
-3. Set the path in `config.py` or via environment variable:
-   ```python
-   FFMPEG_DIR = Path(r"D:\ffmpeg\bin")
-   ```
-4. Verify:
-   ```cmd
-   D:\ffmpeg\bin\ffmpeg.exe -version
-   ```
-
-**Linux:**
-```bash
-sudo apt install ffmpeg   # Debian/Ubuntu
-sudo dnf install ffmpeg   # Fedora
-```
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-### 3. Model Files (Download Separately)
-
-The project does not include model weights. Download and place them according to `config.py`:
-
-| Folder | Contents | Download |
-|--------|----------|----------|
-| `PIPER_DIR` | Piper `.onnx` voice models + `.onnx.json` configs | [Hugging face]([https://huggingface.co/Hacht/CapCapResource](https://huggingface.co/Hacht/CapCapResource/tree/main/piper)) |
-| `F5_MODEL_DIR` | F5-TTS checkpoint (`model_last_repo_compatible_weights.pt`) + `vocab.txt` | [Hugging face](https://huggingface.co/Hacht/CapCapResource) |
-| `F5_VOCODER_DIR` | Vocos vocoder (`vocos-mel-24khz`) | Bundled with F5-TTS |
-| `F5_VOICES_DIR` | Reference audio (`.wav`/`.mp3`) + `voices.json` for F5 + OmniVoice voices | [OmniVoice voices.json](https://huggingface.co/kjanh/KhanhTTS-OmniVoice) |
-| `F5_VOICES_DIR` | Your own cloned voice recordings | Your own recordings |
-
-> **Note:** F5-TTS and OmniVoice **share the same voice directory**. The `voices.json` file defines available voices with reference audio and text. Both engines read from this shared pool.
-
-### 4. GPU Version Only — CUDA
-
-If using the GPU version with F5-TTS:
-- NVIDIA GPU with **4GB+ VRAM**
-- [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) 11.8+
-- PyTorch with CUDA support:
-  ```bash
-  pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu118
-  ```
-
-## Quick Start
-
-### Electron Desktop App (CPU or GPU)
-
-Install the desktop dependencies once:
+### 1. Ứng dụng Desktop (Electron — Khuyến nghị)
 
 ```bash
 npm install
-```
 
-Run either mode during development:
+# Chạy thử (Development)
+npm run start:cpu   # Chế độ CPU (Piper + VieNeu)
+npm run start:gpu   # Chế độ GPU (Đầy đủ engine)
 
-```bash
-npm run start:cpu   # Piper + ONNX Runtime CPU only
-npm run start:gpu   # Piper + F5-TTS + OmniVoice
-```
-
-Create Windows installers:
-
-```bash
+# Đóng gói bộ cài đặt Windows (.exe)
 npm run build:cpu
 npm run build:gpu
 ```
 
-Electron starts the matching FastAPI backend on a free local port, opens the
-existing frontend, and stops the backend when the window closes. The CPU
-backend intentionally has no PyTorch/CUDA dependency. The installer does not
-bundle the full Python environment: it embeds a small base Python runtime, then
-downloads the matching CPU/GPU dependencies into the user's local app-data
-folder on first launch and reuses them later. Internet access is required for
-this first run.
-
-### Manual Portable Environment (Optional)
-
-For maintainers who want to rebuild the installers, prepare the small embedded
-Python archive after creating the CPU portable environment:
+### 2. Chạy dưới dạng Web Server
 
 ```bash
-setup_portable.bat cpu
-npm run prepare:runtime
+# Bản GPU
+cd backend && pip install -r requirements.txt && python main.py
+
+# Bản CPU
+cd backend_cpu && pip install -r requirements.txt && python main.py
 ```
+Mở trình duyệt truy cập: `http://localhost:8000`.
 
-```bash
-setup_portable.bat cpu      # Download portable Python + deps
-npm run start:cpu            # Start CPU Electron app
-```
+---
 
-Or for GPU:
-```bash
-setup_portable.bat gpu
-npm run start:gpu
-```
+## Tải Mô Hình & Tài Nguyên
 
-### GPU Version (Piper + F5-TTS + OmniVoice)
+Bạn có thể tải trực tiếp trong mục **Tài nguyên** của ứng dụng, hoặc tải thủ công:
 
-```bash
-cd backend
-pip install -r requirements.txt
-python main.py
-```
+| Mô hình | Dung lượng | Nguồn tải |
+|---|:---:|---|
+| **Piper Voices** | ~1.5 GB | [Hacht/CapCapResource (piper-new)](https://huggingface.co/Hacht/CapCapResource/tree/main/piper-new) |
+| **VieNeu-TTS** | ~330 MB | [pnnbao-ump/VieNeu-TTS-v3-Turbo](https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo) |
+| **Mẫu giọng tham chiếu** | ~1.8 MB | [Hacht/CapCapResource (f5_voice)](https://huggingface.co/Hacht/CapCapResource/tree/main/f5_voice) |
+| **F5-TTS Model** | ~1.3 GB | [Hacht/CapCapResource (f5_model)](https://huggingface.co/Hacht/CapCapResource/tree/main/f5_model) |
+| **OmniVoice Model** | ~2.3 GB | [kjanh/KhanhTTS-OmniVoice](https://huggingface.co/kjanh/KhanhTTS-OmniVoice) |
 
-### CPU-Only Version (Piper only)
+> ⚡ **Mẹo**: Bật tùy chọn **"Sử dụng Mirror tăng tốc (hf-mirror.com)"** trong ứng dụng nếu đường truyền quốc tế bị chậm.
 
-```bash
-cd backend_cpu
-pip install -r requirements.txt
-python main.py
-```
+---
 
-Open http://localhost:8000 in your browser, or use the Electron app above.
+## Danh Sách API Chính
 
-## Configuration
+| Phương thức | Endpoint | Chức năng |
+|---|---|---|
+| `GET` | `/tts/voices` | Lấy danh sách giọng đọc theo phân hạng (`low`, `turbo`, `medium`, `high`) |
+| `POST` | `/tts/preview` | Nghe thử giọng nhanh |
+| `POST` | `/tts/generate` | Tạo âm thanh từ văn bản |
+| `GET` | `/tts/status/{task_id}` | Theo dõi tiến độ & kiểm tra chất lượng phân đoạn |
+| `POST` | `/tts/merge` | Ghép các đoạn thành file MP3/WAV/SRT |
+| `POST` | `/tts/regenerate_chunk` | Tạo lại một phân đoạn cụ thể |
+| `GET` | `/tts/download_file` | Tải file âm thanh hoàn chỉnh |
+| `POST` | `/tts/clone` | Đăng ký giọng clone mới |
+| `DELETE` | `/tts/voices/{id}` | Xóa giọng clone cá nhân |
+| `GET/POST` | `/tts/settings` | Lấy / cập nhật thư mục lưu tài nguyên & Mirror |
+| `GET` | `/tts/resource_catalog` | Trạng thái & thông tin tải mô hình |
+| `POST` | `/tts/download_resource` | Kích hoạt tải tự động mô hình ngầm |
+| `GET/POST/DELETE` | `/tts/dict/acronyms` | Quản lý từ điển từ viết tắt |
+| `GET/POST/DELETE` | `/tts/dict/words` | Quản lý từ điển phát âm riêng |
 
-### Path Configuration
+---
 
-Edit `config.py` (or `backend_cpu/config.py`) to point to your installed resources:
-
-```python
-# Required — must exist
-PIPER_DIR = Path(r"D:\TTS_Resource\piper")          # Piper .onnx models
-FFMPEG_DIR = Path(r"D:\ffmpeg\bin")                  # ffmpeg.exe + ffprobe.exe
-
-# GPU version only
-F5_RESOURCE_DIR = Path(r"D:\TTS_Resource\f5")        # F5-TTS checkpoint + vocoder
-```
-
-Or set via environment variables:
-```bash
-set PIPER_DIR=D:\TTS_Resource\piper
-set FFMPEG_DIR=D:\ffmpeg\bin
-```
-
-### Verify FFmpeg
-
-Before running, make sure ffmpeg is accessible:
-```bash
-python -c "from pydub import AudioSegment; AudioSegment.from_wav('/dev/null')" 2>&1 | grep -i ffmpeg
-```
-
-If you see a warning about ffmpeg not found, update `FFMPEG_DIR` in `config.py`.
-
-### Network Access
-
-By default the server binds to `0.0.0.0` — accessible from your local network.
-
-The Electron app already binds its backend to localhost. For a manually
-started server, change `host="0.0.0.0"` to `host="127.0.0.1"` in `main.py`.
-
-To allow LAN access on Windows, open the firewall port:
-```cmd
-netsh advfirewall firewall add rule name="TTS API Port 8000" dir=in action=allow protocol=TCP localport=8000
-```
-
-Others on your Wi-Fi can then access via `http://<your-ip>:8000`
-
-## Project Structure
+## Cấu Trúc Thư Mục
 
 ```
 TTS/
-├── backend/              # GPU version (Piper + F5-TTS + OmniVoice)
-│   ├── main.py           # FastAPI endpoints (download, clone, voice CRUD)
-│   ├── tts_quality_checker.py  # Segment quality evaluation module
-│   ├── tts_engine.py     # PiperEngine, F5Engine, OmniVoiceEngine, TaskManager
-│   ├── config.py         # Path configuration
-│   ├── requirements.txt  # Dependencies
-│   ├── custom_dict/      # User dictionaries (CSV)
-│   ├── outputs/          # Generated audio files
-│   └── f5_tts/           # Local F5-TTS copy
-├── backend_cpu/          # CPU-only version (Piper only)
-│   ├── main.py
-│   ├── tts_quality_checker.py
-│   ├── tts_engine.py
-│   ├── config.py
-│   ├── requirements.txt
-│   └── custom_dict/
-├── frontend/
-│   ├── index.html        # Single-page UI
-│   ├── app.js            # Frontend logic
-│   ├── style.css         # Styles
-│   ├── capcap.png        # Logo
-│   └── jszip.min.js      # ZIP export library
-├── setup_portable.bat    # Setup portable Python (no install needed)
-├── screenshot.png        # UI screenshot
-└── README.md
+├── backend/            # Backend GPU (FastAPI, PyTorch, F5-TTS, OmniVoice, VieNeu)
+├── backend_cpu/        # Backend CPU gọn nhẹ (ONNX Runtime, Piper, VieNeu)
+├── frontend/           # Giao diện Web, trình phát âm thanh, bộ song ngữ i18n
+├── electron/           # Tiến trình chính Electron và scripts khởi chạy
+├── electron-builder.base.cjs # Cấu hình đóng gói installer Windows
+└── setup_portable.bat  # Script tự động tạo môi trường Python portable
 ```
 
-The Electron desktop files are `electron/`, `package.json`,
-`electron-builder.cpu.cjs`, and `electron-builder.gpu.cjs`.
+---
 
-## API Endpoints
+## Bản Quyền & Tham Khảo
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/tts/voices` | List voices with `gender`, `description`, `is_clone` |
-| `POST` | `/tts/preview` | Generate short preview |
-| `POST` | `/tts/generate` | Start generation (supports `split_mode`: default/sentence/paragraph) |
-| `GET` | `/tts/status/{task_id}` | Progress + per-segment quality (`issues[]`, `can_export`, `warning`) |
-| `POST` | `/tts/merge` | Merge segments → final MP3/WAV + SRT |
-| `POST` | `/tts/regenerate_chunk` | Regenerate a segment (with optional per-segment `voice_id`) |
-| `GET` | `/tts/download_file` | Download audio (128k/320k MP3, WAV, or SRT) |
-| `POST` | `/tts/clone` | Clone a voice (accepts `gender`, `description`) |
-| `DELETE` | `/tts/voices/{voice_id}` | Delete a cloned voice |
-| `PATCH` | `/tts/voices/{voice_id}` | Update voice description/gender |
-| `GET/POST/DELETE` | `/tts/dict/acronyms` | Acronym dictionary |
-| `GET/POST/DELETE` | `/tts/dict/words` | Word dictionary |
-| `GET/POST` | `/tts/pause_config` | Pause configuration |
-| `GET/DELETE` | `/tts/history` | Generation history |
-
-## Dependencies
-
-### GPU Version
-- `fastapi`, `uvicorn` — Web framework
-- `pydub`, `ffmpeg` — Audio processing
-- `torch`, `torchaudio` — PyTorch (GPU)
-- `f5-tts` — Voice cloning model (Medium tier)
-- `omnivoice`, `soundfile` — OmniVoice model (High tier)
-- `piper-tts`, `onnxruntime` — Fast TTS (Low tier)
-- `librosa`, `numpy` — Audio effects (pitch shift)
-- `vietnormalizer` — Vietnamese text normalization
-- `omegaconf` — Config management
-
-### CPU Version
-- `fastapi`, `uvicorn`
-- `pydub`, `ffmpeg`
-- `piper-tts`, `onnxruntime`
-- `vietnormalizer`
-- `numpy`
-
-## License
-
-Apache License 2.0. See [LICENSE](./LICENSE).
-
-## References
-
-This project builds on and references the following open-source projects:
-
-- [OmniVoice Vietnamese](https://huggingface.co/kjanh/KhanhTTS-OmniVoice) — High-quality Vietnamese TTS (High tier)
-- [F5-TTS-Vietnamese](https://github.com/nguyenthienhy/F5-TTS-Vietnamese) — Vietnamese voice cloning (Medium tier)
-- [vietnormalizer](https://github.com/nghimestudio/vietnormalizer) — Vietnamese text normalization
-- [piper](https://github.com/rhasspy/piper) — Local text-to-speech synthesis (Low tier)
+- Giấy phép: [Apache 2.0](./LICENSE)
+- Tham khảo & xây dựng trên: [VieNeu-TTS](https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo), [OmniVoice](https://huggingface.co/kjanh/KhanhTTS-OmniVoice), [F5-TTS](https://github.com/nguyenthienhy/F5-TTS-Vietnamese), [vietnormalizer](https://github.com/nghimestudio/vietnormalizer), [Piper](https://github.com/rhasspy/piper).

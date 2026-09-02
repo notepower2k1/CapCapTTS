@@ -7,7 +7,7 @@
 	<title>CapCap TTS</title>
 	<link rel="icon" type="image/svg+xml" href="capcap.png">
 	<link rel="icon" type="image/x-icon" href="capcap.ico">
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=1788368488">
 </head>
 
 <body>
@@ -17,21 +17,14 @@
 			<span id="gpuBadge" data-gpu-only
 				style="display:none;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-sm);font-size:11px;font-weight:600;border:1px solid var(--card-border);color:var(--text-muted);margin:4px 0;"></span>
 			<div class="header-actions">
-				<button class="btn-icon" id="dictBtn">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-						stroke-linejoin="round">
-						<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-						<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-					</svg>
-					Dict
-				</button>
+
 				<button class="btn-icon" id="pauseBtn">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
 						stroke-linejoin="round">
 						<circle cx="12" cy="12" r="10" />
 						<polyline points="12 6 12 12 16 14" />
 					</svg>
-					Pause
+					<span data-i18n="pause_btn">Pause</span>
 				</button>
 				<button class="btn-icon" id="historyBtn">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -39,7 +32,7 @@
 						<path d="M3 3v18h18" />
 						<path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
 					</svg>
-					History
+					<span data-i18n="history_btn">History</span>
 				</button>
 				<button class="btn-icon" id="resourceBtn">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -50,7 +43,7 @@
 						<line x1="15" y1="15" x2="21" y2="21" />
 						<line x1="4" y1="4" x2="9" y2="9" />
 					</svg>
-					Resources
+					<span data-i18n="resource_btn">Resources</span>
 				</button>
 				<button class="btn-icon" id="helpBtn">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -59,7 +52,7 @@
 						<line x1="12" y1="16" x2="12" y2="12" />
 						<line x1="12" y1="8" x2="12.01" y2="8" />
 					</svg>
-					Guide
+					<span data-i18n="help_btn">Guide</span>
 				</button>
 				<button class="btn-icon danger" id="resetBtn" style="display:none;">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -67,13 +60,21 @@
 						<polyline points="23 4 23 10 17 10" />
 						<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
 					</svg>
-					Reset
+					<span data-i18n="reset_btn">Reset</span>
 				</button>
-				<button class="btn-icon" id="themeBtn" title="Toggle dark mode">
+				<button class="btn-icon" id="themeBtn" title="Toggle dark mode" data-i18n-title="theme_btn_title">
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
 						stroke-linejoin="round">
 						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
 					</svg>
+				</button>
+				<button class="btn-icon" id="langBtn" title="Switch Language / Đổi ngôn ngữ" data-i18n-title="lang_btn_title">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10" />
+						<line x1="2" y1="12" x2="22" y2="12" />
+						<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+					</svg>
+					<span id="langLabel">VI</span>
 				</button>
 			</div>
 		</div>
@@ -91,7 +92,7 @@
 								<polyline points="17 8 12 3 7 8" />
 								<line x1="12" y1="3" x2="12" y2="15" />
 							</svg>
-							<div>Drop <span>.txt</span> <span>.md</span> files or paste text</div>
+							<div data-i18n="drop_hint">Drop <span>.txt</span> <span>.md</span> files or paste text</div>
 						</div>
 						<input type="file" id="fileInput" accept=".txt,.md" multiple style="display:none;">
 					</div>
@@ -109,7 +110,7 @@
 								<line x1="18" y1="6" x2="6" y2="18" />
 								<line x1="6" y1="6" x2="18" y2="18" />
 							</svg>
-							Clear
+							<span data-i18n="btn_clear">Clear</span>
 						</button>
 						<button class="btn-icon" id="saveDraftBtn">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -118,7 +119,7 @@
 								<polyline points="17 21 17 13 7 13 7 21" />
 								<polyline points="7 3 7 8 15 8" />
 							</svg>
-							Save Draft
+							<span data-i18n="btn_save_draft">Save Draft</span>
 						</button>
 					</div>
 					<div class="pause-controls">
@@ -130,42 +131,56 @@
 							<option value="2.5">2.5s</option>
 							<option value="3">3s</option>
 						</select>
-						<button class="btn-sm" id="insertPauseBtn">+ Insert pause</button>
+						<button class="btn-sm" id="insertPauseBtn" data-i18n="btn_insert_pause">+ Insert pause</button>
 					</div>
 					<div class="checkbox-group">
-						<label class="checkbox-label">
-							<input type="checkbox" id="normalizeCheckbox">
-							<span>Vietnamese normalize</span>
-						</label>
-						<label class="checkbox-label">
-							<input type="checkbox" id="cleanCheckbox">
-							<span>Auto clean text</span>
-						</label>
-						<label class="checkbox-label">
-							<input type="checkbox" id="normalizeAudioCheckbox">
-							<span>Normalize volume</span>
-						</label>
+						<div class="checkbox-item">
+							<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+								<label class="checkbox-label">
+									<input type="checkbox" id="normalizeCheckbox">
+									<span data-i18n="chk_normalize">Vietnamese normalize</span>
+								</label>
+								<button class="btn-sm" id="inlineDictBtn" style="padding:2px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;background:var(--card-bg);border:1px solid var(--card-border);" title="Manage dictionary (Acronyms & foreign words)" data-i18n-title="tip_manage_dict">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;">
+										<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+										<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+									</svg>
+									<span data-i18n="btn_inline_dict">Dictionary</span>
+								</button>
+							</div>
+							<div class="checkbox-hint" id="normalizeHint" data-i18n="hint_normalize">Converts numbers, dates, currencies & abbreviations to spoken words</div>
+						</div>
+						<div class="checkbox-item">
+							<label class="checkbox-label">
+								<input type="checkbox" id="cleanCheckbox">
+								<span data-i18n="chk_clean">Auto clean text</span>
+							</label>
+							<div class="checkbox-hint" data-i18n="hint_clean">Removes emojis, URLs & unsupported symbols before synthesis</div>
+						</div>
 					<label class="checkbox-label" id="splitSegmentsLabel"
 						style="border-top:1px solid var(--card-border);padding-top:10px;margin-top:4px;display:none;">
 						<input type="checkbox" id="splitSegmentsCheckbox" checked>
-						<span>Split segments</span>
+						<span data-i18n="chk_split">Split segments</span>
 					</label>
-					<div id="splitModeOptions" style="margin-top:8px;">
+					<div id="splitModeOptions" style="margin-top:8px;border-top:1px solid var(--card-border);padding-top:10px;">
 						<select id="splitModeSelect"
 							style="width:100%;padding:6px 10px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-							<option value="default">Default (paragraph + sentence)</option>
-							<option value="sentence">By sentence</option>
-							<option value="paragraph">By paragraph</option>
+							<option value="default" data-i18n="opt_split_default">Default (paragraph + sentence)</option>
+							<option value="sentence" data-i18n="opt_split_sentence">By sentence</option>
+							<option value="paragraph" data-i18n="opt_split_paragraph">By paragraph</option>
+							<option value="custom" data-i18n="opt_split_custom">Custom (by blank line)</option>
 						</select>
+						<div class="checkbox-hint" style="margin-left:2px;margin-top:2px;" data-i18n="hint_split_mode">Divides long text into smaller segments for smooth AI speech</div>
 					</div>
 					</div>
 				</div>
 
 				<div class="card">
 					<div class="toggle-group" id="voiceModeToggle">
-						<button class="toggle-btn active" data-mode="low">Low</button>
-						<button class="toggle-btn" data-mode="medium" data-gpu-only>Medium</button>
-						<button class="toggle-btn" data-mode="high" data-gpu-only>High</button>
+						<button class="toggle-btn active" data-mode="low" data-i18n="tier_low">Low</button>
+						<button class="toggle-btn" data-mode="turbo" data-i18n="tier_turbo">Medium-Low</button>
+						<button class="toggle-btn" data-mode="medium" data-gpu-only data-i18n="tier_medium">Medium</button>
+						<button class="toggle-btn" data-mode="high" data-gpu-only data-i18n="tier_high">High</button>
 					</div>
 					<div class="voice-row">
 						<span class="voice-label" id="currentVoiceLabel">Ban Mai <span
@@ -176,19 +191,19 @@
 								<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 								<circle cx="12" cy="12" r="3" />
 							</svg>
-							Change
+							<span data-i18n="btn_change_voice">Change</span>
 						</button>
-						<button class="btn-voice-new" id="newVoiceBtn" data-gpu-only style="display:none;">+ New</button>
+						<button class="btn-voice-new" id="newVoiceBtn" style="display:none;" data-i18n="btn_new_voice">+ New</button>
 					</div>
 					<div class="action-row">
 						<button class="btn btn-secondary" id="previewBtn">
 							<svg viewBox="0 0 24 24" fill="currentColor">
 								<polygon points="5 3 19 12 5 21 5 3" />
 							</svg>
-							Preview
+							<span data-i18n="btn_preview">Preview</span>
 						</button>
 						<div style="display:flex;flex-direction:column;flex:1;">
-							<button class="btn btn-primary" id="generateBtn" style="width:100%;">Generate</button>
+							<button class="btn btn-primary" id="generateBtn" style="width:100%;" data-i18n="btn_generate">Generate</button>
 							<span id="fileGenIndicator"
 								style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:2px;cursor:pointer;display: none;"
 								onclick="_fqSelected=null;renderFileQueue();_loadFileToEditor(-1);"></span>
@@ -199,44 +214,44 @@
 							stroke-linecap="round" stroke-linejoin="round">
 							<polyline points="6 9 12 15 18 9" />
 						</svg>
-						Advanced
+						<span data-i18n="lbl_adv">Advanced</span>
 					</div>
 					<div id="advPanel" class="hidden" style="margin-top:14px;">
 					<div class="slider-row">
-						<span class="slider-label">Speed</span>
+						<span class="slider-label" data-i18n="lbl_speed">Speed</span>
 						<input type="range" id="speedSlider" min="0.8" max="1.2" step="0.05" value="1">
 						<span class="slider-value" id="speedVal">1.0×</span>
 					</div>
 					<div class="slider-row">
-						<span class="slider-label">Volume</span>
+						<span class="slider-label" data-i18n="lbl_volume">Volume</span>
 						<input type="range" id="volumeSlider" min="-10" max="10" step="1" value="0">
 						<span class="slider-value" id="volumeVal">0 dB</span>
 					</div>
 						<div id="modelConfig" class="hidden" data-gpu-only
 							style="margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
-							<div
-								style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;margin-bottom:8px;">
+							<div id="modelConfigTitle"
+								style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;margin-bottom:8px;" data-i18n="lbl_model_config_f5">
 								Model Config — Medium (F5)</div>
 							<div class="slider-row" id="cfgRow"
-								title="Higher = voice matches reference more closely. Lower = more variation.">
-								<span class="slider-label">Voice Match</span>
+								title="Higher = voice matches reference more closely. Lower = more variation." data-i18n-title="tip_voice_match">
+								<span class="slider-label" data-i18n="lbl_voice_match">Voice Match</span>
 								<input type="range" id="cfgSlider" min="1" max="4" step="0.1" value="2">
 								<span class="slider-value" id="cfgVal">2.0</span>
 							</div>
 							<div class="slider-row" id="stepsRow"
-								title="More steps = better quality but slower. 32 is a good balance.">
-								<span class="slider-label">Quality</span>
+								title="More steps = better quality but slower. 32 is a good balance." data-i18n-title="tip_quality_steps">
+								<span class="slider-label" data-i18n="lbl_quality">Quality</span>
 								<input type="range" id="stepsSlider" min="16" max="64" step="16" value="32">
 								<span class="slider-value" id="stepsVal">32</span>
 							</div>
-							<div class="slider-row" id="swayRow" title="Controls speech rhythm. -1.0 is default.">
-								<span class="slider-label">Rhythm</span>
+							<div class="slider-row" id="swayRow" title="Controls speech rhythm. -1.0 is default." data-i18n-title="tip_rhythm">
+								<span class="slider-label" data-i18n="lbl_rhythm">Rhythm</span>
 								<input type="range" id="swaySlider" min="-1" max="1" step="0.1" value="-1">
 								<span class="slider-value" id="swayVal">-1.0</span>
 							</div>
 							<div class="slider-row" id="numStepRow"
-								title="More steps = better quality but slower. 8 is a good balance.">
-								<span class="slider-label">Quality</span>
+								title="More steps = better quality but slower. 8 is a good balance." data-i18n-title="tip_quality_steps">
+								<span class="slider-label" data-i18n="lbl_quality">Quality</span>
 								<input type="range" id="numStepSlider" min="4" max="64" step="4" value="32">
 								<span class="slider-value" id="numStepVal">16</span>
 							</div>
@@ -268,7 +283,7 @@
 								<line x1="16" y1="13" x2="8" y2="13" />
 								<line x1="16" y1="17" x2="8" y2="17" />
 							</svg>
-							Text Segments <span id="chunkCount"
+							<span data-i18n="title_segments">Text Segments</span> <span id="chunkCount"
 								style="font-weight:400;color:var(--text-muted);font-size:12px;"></span>
 						</span>
 						<div style="display:flex;gap:8px;align-items:center;">
@@ -283,24 +298,24 @@
 									<polyline points="17 21 17 13 7 13 7 21" />
 									<polyline points="7 3 7 8 15 8" />
 								</svg>
-								<span id="autosaveText">Saved</span>
+								<span id="autosaveText" data-i18n="saved">Saved</span>
 							</div>
 						</div>
 					</div>
 
 					<div class="segment-filters" id="segmentFilters" style="display:none;">
-						<button class="segment-filter-btn active" data-filter="all">All</button>
+						<button class="segment-filter-btn active" data-filter="all" data-i18n="filter_all">All</button>
 						<button class="segment-filter-btn" data-filter="done">
-							<span style="color:var(--success);">&#10003;</span> Done
+							<span style="color:var(--success);">&#10003;</span> <span data-i18n="filter_done">Done</span>
 						</button>
 						<button class="segment-filter-btn" data-filter="warning">
-							<span style="color:var(--warning);">&#9888;</span> Warning
+							<span style="color:var(--warning);">&#9888;</span> <span data-i18n="filter_warning">Warning</span>
 						</button>
 						<button class="segment-filter-btn" data-filter="failed">
-							<span style="color:var(--error);">&#10007;</span> Failed
+							<span style="color:var(--error);">&#10007;</span> <span data-i18n="filter_failed">Failed</span>
 						</button>
 						<button class="segment-filter-btn" data-filter="processing">
-							<span style="color:var(--processing);">&#9696;</span> Processing
+							<span style="color:var(--processing);">&#9696;</span> <span data-i18n="filter_processing">Processing</span>
 						</button>
 					</div>
 
@@ -311,7 +326,7 @@
 								<polyline points="23 4 23 10 17 10" />
 								<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
 							</svg>
-							Retry Failed
+							<span data-i18n="btn_retry_failed">Retry Failed</span>
 						</button>
 						<button class="btn-sm" id="retryWarningBtn">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -319,14 +334,14 @@
 								<polyline points="23 4 23 10 17 10" />
 								<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
 							</svg>
-							Retry Warning
+							<span data-i18n="btn_retry_warning">Retry Warning</span>
 						</button>
-						<button class="btn-sm" id="collapseAllBtn">Collapse All</button>
-						<button class="btn-sm" id="expandFailedBtn">Expand Failed</button>
+						<button class="btn-sm" id="collapseAllBtn" data-i18n="btn_collapse_all">Collapse All</button>
+						<button class="btn-sm" id="expandFailedBtn" data-i18n="btn_expand_failed">Expand Failed</button>
 					</div>
 
 					<div id="chunkList" style="flex:1;">
-						<div class="no-chunks">Enter text and click Generate to see segments</div>
+						<div class="no-chunks" data-i18n="empty_segments">Enter text and click Generate to see segments</div>
 					</div>
 					<div id="mergeSection" class="hidden" style="margin-top:14px;display:flex;gap:8px;">
 						<button class="btn-merge" id="mergeBtn" style="flex:1;">
@@ -339,7 +354,7 @@
 								<line x1="3" y1="12" x2="3.01" y2="12" />
 								<line x1="3" y1="18" x2="3.01" y2="18" />
 							</svg>
-							Merge &amp; Download All
+							<span data-i18n="btn_merge_download">Merge &amp; Download All</span>
 						</button>
 						<button class="btn-merge" id="downloadAllBtn"
 							style="flex:0 0 auto;padding:12px 16px;background:var(--bg-secondary);color:var(--text-secondary);border:1px solid var(--card-border);width:auto;">
@@ -350,7 +365,7 @@
 								<line x1="12" y1="15" x2="12" y2="3" />
 								<line x1="12" y1="1" x2="12" y2="3" />
 							</svg>
-							Download All
+							<span data-i18n="btn_download_all">Download All</span>
 						</button>
 					</div>
 				</div>
@@ -362,8 +377,8 @@
 		<div class="final-audio-bar" id="finalAudioBar">
 			<div class="final-audio-section">
 				<div class="final-audio-header">
-					<span>Final Audio</span>
-					<button class="close-final" id="closeFinalAudio" title="Hide">&times;</button>
+					<span data-i18n="final_audio_title">Final Audio</span>
+					<button class="close-final" id="closeFinalAudio" title="Hide" data-i18n-title="tip_hide">&times;</button>
 				</div>
 
 				<audio id="audioPlayer" style="display:none;"></audio>
@@ -387,14 +402,14 @@
 				<!-- Row 3: Controls -->
 				<div class="fa-controls">
 					<div class="fa-controls-left">
-						<button class="cp-btn cp-vol" id="cpVolBtn" title="Volume">
+						<button class="cp-btn cp-vol" id="cpVolBtn" title="Volume" data-i18n-title="tip_volume">
 							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 								<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
 								<path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
 							</svg>
 						</button>
 						<input type="range" class="cp-vol-slider" id="cpVolSlider" min="0" max="1" step="0.05" value="1"
-							title="Volume">
+							title="Volume" data-i18n-title="tip_volume">
 					</div>
 					<div class="fa-controls-center">
 						<button class="cp-btn cp-seek" id="cpRewindBtn" title="-2s">
@@ -404,7 +419,7 @@
 								<path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
 							</svg>
 						</button>
-						<button class="cp-btn cp-play" id="cpPlayBtn" title="Play">
+						<button class="cp-btn cp-play" id="cpPlayBtn" title="Play" data-i18n-title="tip_play">
 							<svg viewBox="0 0 24 24" fill="currentColor">
 								<polygon points="5 3 19 12 5 21 5 3" />
 							</svg>
@@ -443,7 +458,7 @@
 							<polyline points="7 10 12 15 17 10" />
 							<line x1="12" y1="15" x2="12" y2="3" />
 						</svg>
-						Export
+						<span data-i18n="btn_export">Export</span>
 					</button>
 					<button class="btn btn-ghost" id="remergeBtn">
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -451,8 +466,59 @@
 							<polyline points="23 4 23 10 17 10" />
 							<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
 						</svg>
-						Re-merge
+						<span data-i18n="btn_remerge">Re-merge</span>
 					</button>
+				</div>
+
+				<!-- Row 5: Audio Mastering Options -->
+				<div class="fa-mastering-wrap" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
+					<div class="adv-toggle" id="masteringToggle" style="border-top:none;margin-top:0;padding-top:0;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);font-weight:600;padding:2px 0;">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+							<polyline points="6 9 12 15 18 9" />
+						</svg>
+						<span data-i18n="mastering_title">Mastering Options</span>
+					</div>
+					<div id="masteringPanel" class="hidden" style="margin-top:8px;background:var(--bg-primary);padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--card-border);">
+						<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;">
+							<div>
+								<label class="checkbox-label" style="font-size:12px;">
+									<input type="checkbox" id="mFadeEdges" checked>
+									<span data-i18n="mastering_fade">Anti-click Fade (8ms/12ms)</span>
+								</label>
+								<div class="checkbox-hint" data-i18n="hint_m_fade">Prevents popping & clicking sounds at sentence boundaries</div>
+							</div>
+							<div>
+								<label class="checkbox-label" style="font-size:12px;">
+									<input type="checkbox" id="mVolumeMatch" checked>
+									<span data-i18n="mastering_vol_match">Volume Matching</span>
+								</label>
+								<div class="checkbox-hint" data-i18n="hint_m_vol">Balances loudness across all segments evenly</div>
+							</div>
+							<div>
+								<label class="checkbox-label" style="font-size:12px;">
+									<input type="checkbox" id="mCrossfade" checked>
+									<span data-i18n="mastering_crossfade">Crossfade (50ms)</span>
+								</label>
+								<div class="checkbox-hint" data-i18n="hint_m_crossfade">Smooth 50ms overlap transition between adjacent sentences</div>
+							</div>
+							<div>
+								<label class="checkbox-label" style="font-size:12px;">
+									<input type="checkbox" id="mCompressor" checked>
+									<span data-i18n="mastering_compressor">Voice Compressor</span>
+								</label>
+								<div class="checkbox-hint" data-i18n="hint_m_comp">Produces a warmer, richer, and podcast-ready voice tone</div>
+							</div>
+						</div>
+						<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--card-border);display:flex;justify-content:flex-end;">
+							<button class="btn btn-sm btn-save" id="applyMasteringBtn" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 14px;">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+									<polyline points="23 4 23 10 17 10" />
+									<path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+								</svg>
+								<span data-i18n="btn_apply_remerge">Apply &amp; Re-merge</span>
+							</button>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -464,7 +530,7 @@
 				<circle cx="6" cy="18" r="3" />
 				<circle cx="18" cy="16" r="3" />
 			</svg>
-			Final Audio
+			<span data-i18n="final_audio_title">Final Audio</span>
 		</button>
 
 		<!-- Floating Progress Bar -->
@@ -472,7 +538,7 @@
 			<div class="progress-status-row">
 				<span class="progress-status-text">
 					<span class="spinner"></span>
-					<span id="floatStatus">Generating audio...</span>
+					<span id="floatStatus" data-i18n="generating_audio">Generating audio...</span>
 				</span>
 				<div style="display:flex;align-items:center;gap:12px;">
 					<span class="progress-count" id="floatCount">0 / 0</span>
@@ -481,7 +547,7 @@
 							<line x1="18" y1="6" x2="6" y2="18" />
 							<line x1="6" y1="6" x2="18" y2="18" />
 						</svg>
-						Cancel
+						<span data-i18n="btn_cancel">Cancel</span>
 					</button>
 				</div>
 			</div>
@@ -500,45 +566,45 @@
 						<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
 						<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
 					</svg>
-					Dictionary
+					<span data-i18n="dict_title">Dictionary</span>
 				</h2>
 				<div class="dict-tabs">
-					<button class="dict-tab active" data-tab="acronyms"
+					<button class="dict-tab active" data-tab="acronyms" data-i18n="dict_tab_acronyms"
 						onclick="switchDictTab('acronyms')">Acronyms</button>
-					<button class="dict-tab" data-tab="words" onclick="switchDictTab('words')">Words</button>
+					<button class="dict-tab" data-tab="words" data-i18n="dict_tab_words" onclick="switchDictTab('words')">Words</button>
 				</div>
 				<div id="dictAcronyms">
 					<div class="dict-table-wrap">
 						<table class="dict-table">
 							<thead>
 								<tr>
-									<th>Acronym</th>
-									<th>Pronunciation</th>
+									<th data-i18n="th_acronym">Acronym</th>
+									<th data-i18n="th_pronunciation">Pronunciation</th>
 									<th></th>
 								</tr>
 							</thead>
 							<tbody id="acroBody"></tbody>
 						</table>
 					</div>
-					<button class="btn-dict-add" onclick="addDictRow('acronyms')">+ Add entry</button>
+					<button class="btn-dict-add" onclick="addDictRow('acronyms')" data-i18n="btn_add_entry">+ Add entry</button>
 				</div>
 				<div id="dictWords" class="hidden">
 					<div class="dict-table-wrap">
 						<table class="dict-table">
 							<thead>
 								<tr>
-									<th>Word</th>
-									<th>Pronunciation</th>
+									<th data-i18n="th_word">Word</th>
+									<th data-i18n="th_pronunciation">Pronunciation</th>
 									<th></th>
 								</tr>
 							</thead>
 							<tbody id="wordBody"></tbody>
 						</table>
 					</div>
-					<button class="btn-dict-add" onclick="addDictRow('words')">+ Add entry</button>
+					<button class="btn-dict-add" onclick="addDictRow('words')" data-i18n="btn_add_entry">+ Add entry</button>
 				</div>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="dictCloseBtn">Close</button>
+					<button class="btn-cancel" id="dictCloseBtn" data-i18n="btn_close">Close</button>
 				</div>
 			</div>
 		</div>
@@ -552,7 +618,7 @@
 						<circle cx="12" cy="12" r="10" />
 						<polyline points="12 6 12 12 16 14" />
 					</svg>
-					Punctuation Pauses
+					<span data-i18n="pause_title">Punctuation Pauses</span>
 				</h2>
 				<div class="pause-toggle-row">
 					<label class="pause-toggle">
@@ -561,12 +627,12 @@
 						<span class="pause-toggle-knob"></span>
 					</label>
 					<span class="pause-toggle-label" id="pauseToggleLabel">ON</span>
-					<span class="pause-toggle-desc">Silence after punctuation (seconds)</span>
+					<span class="pause-toggle-desc" data-i18n="pause_desc">Silence after punctuation (seconds)</span>
 				</div>
 				<div id="pauseSliders"></div>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="pauseCloseBtn">Close</button>
-					<button class="btn-save" id="pauseSaveBtn">Save</button>
+					<button class="btn-cancel" id="pauseCloseBtn" data-i18n="btn_close">Close</button>
+					<button class="btn-save" id="pauseSaveBtn" data-i18n="btn_save">Save</button>
 				</div>
 			</div>
 		</div>
@@ -582,32 +648,34 @@
 						<line x1="12" y1="19" x2="12" y2="23" />
 						<line x1="8" y1="23" x2="16" y2="23" />
 					</svg>
-					Select Voice
+					<span data-i18n="voice_modal_title">Select Voice</span>
 				</h2>
 				<div class="dict-tabs" style="display:none;">
 					<button class="dict-tab active" data-tab="low" onclick="switchVoiceTab('low')">Low — Piper</button>
+					<button class="dict-tab" data-tab="turbo" onclick="switchVoiceTab('turbo')">Medium-Low — VieNeu</button>
 					<button class="dict-tab" data-tab="medium" data-gpu-only onclick="switchVoiceTab('medium')">Medium — F5</button>
 					<button class="dict-tab" data-tab="high" data-gpu-only onclick="switchVoiceTab('high')">High — OmniVoice</button>
 				</div>
 				<div class="voice-filter-bar" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
 					<select id="voiceGenderFilter" onchange="renderCurrentVoiceTab()"
 						style="padding:5px 10px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-						<option value="">All Genders</option>
-						<option value="male">Male</option>
-						<option value="female">Female</option>
+						<option value="" data-i18n="gender_all">All Genders</option>
+						<option value="male" data-i18n="gender_male">Male</option>
+						<option value="female" data-i18n="gender_female">Female</option>
 					</select>
 					<select id="voiceTypeFilter" onchange="renderCurrentVoiceTab()"
 						style="padding:5px 10px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:12px;background:var(--card-bg);color:var(--text-secondary);font-family:inherit;">
-						<option value="">All Types</option>
-						<option value="default">Default</option>
-						<option value="clone">Clone</option>
+						<option value="" data-i18n="type_all">All Types</option>
+						<option value="default" data-i18n="type_default">Default</option>
+						<option value="clone" data-i18n="type_clone">Clone</option>
 					</select>
 				</div>
 				<div id="voiceLowList" class="voice-grid" style="max-height:420px;overflow-y:auto;"></div>
+				<div id="voiceTurboList" class="voice-grid hidden" style="max-height:420px;overflow-y:auto;"></div>
 				<div id="voiceMediumList" class="voice-grid hidden" style="max-height:420px;overflow-y:auto;"></div>
 				<div id="voiceHighList" class="voice-grid hidden" style="max-height:420px;overflow-y:auto;"></div>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="voiceCloseBtn">Close</button>
+					<button class="btn-cancel" id="voiceCloseBtn" data-i18n="btn_close">Close</button>
 				</div>
 			</div>
 		</div>
@@ -621,12 +689,12 @@
 						<path d="M3 3v18h18" />
 						<path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
 					</svg>
-					History
+					<span data-i18n="history_title">History</span>
 				</h2>
 				<div style="max-height:420px;overflow-y:auto;" id="historyList"></div>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="historyClearBtn" style="color:var(--error);">Clear All</button>
-					<button class="btn-cancel" id="historyCloseBtn">Close</button>
+					<button class="btn-cancel" id="historyClearBtn" style="color:var(--error);" data-i18n="btn_clear_all">Clear All</button>
+					<button class="btn-cancel" id="historyCloseBtn" data-i18n="btn_close">Close</button>
 				</div>
 			</div>
 		</div>
@@ -642,25 +710,25 @@
 						<line x1="12" y1="19" x2="12" y2="23" />
 						<line x1="8" y1="23" x2="16" y2="23" />
 					</svg>
-					Voice Lab
+					<span data-i18n="voice_lab_title">Voice Lab</span>
 				</h2>
-				<label>Voice Name</label>
-				<input id="cloneVoiceName" placeholder="e.g. my_voice_1">
-				<label>Gender</label>
+				<label data-i18n="lbl_voice_name">Voice Name</label>
+				<input id="cloneVoiceName" placeholder="e.g. my_voice_1" data-i18n-placeholder="ph_voice_name">
+				<label data-i18n="lbl_gender">Gender</label>
 				<select id="cloneVoiceGender"
 					style="width:100%;padding:10px 12px;border:1px solid var(--card-border);border-radius:var(--radius-sm);font-size:14px;background:var(--bg-primary);color:var(--text-primary);font-family:inherit;">
-					<option value="male">Male</option>
-					<option value="female">Female</option>
+					<option value="male" data-i18n="gender_male">Male</option>
+					<option value="female" data-i18n="gender_female">Female</option>
 				</select>
-				<label>Description</label>
-				<textarea id="cloneVoiceDesc" placeholder="No description" style="min-height:50px;"></textarea>
-				<label>Reference Audio</label>
+				<label data-i18n="lbl_desc">Description</label>
+				<textarea id="cloneVoiceDesc" placeholder="No description" style="min-height:50px;" data-i18n-placeholder="ph_desc"></textarea>
+				<label data-i18n="lbl_ref_audio">Reference Audio</label>
 				<input type="file" id="cloneRefAudio" accept="audio/*">
-				<label>Reference Text</label>
-				<textarea id="cloneRefText" placeholder="What was said in the reference audio..."></textarea>
+				<label data-i18n="lbl_ref_text">Reference Text</label>
+				<textarea id="cloneRefText" placeholder="What was said in the reference audio..." data-i18n-placeholder="ph_ref_text"></textarea>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="cloneCancelBtn">Cancel</button>
-					<button class="btn-save" id="cloneSaveBtn">Save Voice</button>
+					<button class="btn-cancel" id="cloneCancelBtn" data-i18n="btn_cancel">Cancel</button>
+					<button class="btn-save" id="cloneSaveBtn" data-i18n="btn_save_voice">Save Voice</button>
 				</div>
 			</div>
 		</div>
@@ -677,18 +745,44 @@
 						<line x1="15" y1="15" x2="21" y2="21" />
 						<line x1="4" y1="4" x2="9" y2="9" />
 					</svg>
-					Resources
+					<span data-i18n="resource_title">Resources</span>
 				</h2>
 				<div class="dict-tabs">
-					<button class="dict-tab active" data-rtab="download"
+					<button class="dict-tab active" data-rtab="download" data-i18n="tab_download"
 						onclick="switchResourceTab('download')">Download</button>
-					<button class="dict-tab" data-rtab="models" data-gpu-only onclick="switchResourceTab('models')">Load
+					<button class="dict-tab" data-rtab="models" data-i18n="tab_load_models" onclick="switchResourceTab('models')">Load
 						Models</button>
 				</div>
+								<!-- Resource Storage Location Card -->
+				<div class="resource-storage-card" style="background:var(--bg-primary);border:1px solid var(--card-border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;">
+					<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+						<span style="font-size:12px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:6px;">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+							<span data-i18n="lbl_storage_path">Resource Storage Location</span>
+						</span>
+						<div style="display:flex;gap:6px;">
+							<button class="btn-sm" id="btnOpenResourceFolder" onclick="openResourceFolder()" style="font-size:11px;padding:3px 8px;cursor:pointer;" data-i18n="btn_open_folder">Open Folder</button>
+							<button class="btn-sm" id="btnResetResourceDir" onclick="resetResourceFolder()" style="font-size:11px;padding:3px 8px;cursor:pointer;" data-i18n="btn_reset_default">Default</button>
+						</div>
+					</div>
+					<div style="display:flex;gap:8px;">
+						<input type="text" id="resourceDirInput" style="flex:1;font-size:12px;padding:6px 10px;font-family:monospace;border:1px solid var(--card-border);border-radius:var(--radius-sm);background:var(--card-bg);color:var(--text-primary);" placeholder="D:\CodingTime\TTS_Resource">
+						<button class="btn-sm btn-primary" id="btnSaveResourceDir" onclick="saveResourceFolder()" style="font-size:11px;padding:6px 14px;font-weight:600;cursor:pointer;" data-i18n="btn_save_path">Save</button>
+					</div>
+					<div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.4;" data-i18n="hint_storage_path">
+						All downloaded voice models (Piper, VieNeu, F5-TTS, OmniVoice) are saved to and read from this directory.
+					</div>
+					<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between;">
+						<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-primary);">
+							<input type="checkbox" id="useMirrorCheckbox" onchange="toggleMirrorSpeed(this.checked)" style="accent-color:var(--accent-primary);cursor:pointer;width:15px;height:15px;">
+							<span>⚡ <strong data-i18n="lbl_use_mirror">Fast Mirror download (hf-mirror.com)</strong> <span style="color:var(--text-muted);font-size:11px;" data-i18n="hint_use_mirror">(Faster when international connection is slow)</span></span>
+						</label>
+					</div>
+				</div>
 				<div id="resourceDownloadTab"></div>
-				<div id="resourceModelsTab" class="hidden" data-gpu-only></div>
+				<div id="resourceModelsTab" class="hidden"></div>
 				<div class="modal-actions">
-					<button class="btn-cancel" id="resourceCloseBtn">Close</button>
+					<button class="btn-cancel" id="resourceCloseBtn" data-i18n="btn_close">Close</button>
 				</div>
 			</div>
 		</div>
@@ -705,9 +799,9 @@
 						<line x1="12" y1="16" x2="12" y2="12" />
 						<line x1="12" y1="8" x2="12.01" y2="8" />
 					</svg>
-					How to Use
+					<span data-i18n="help_title">How to Use</span>
 				</h2>
-				<button class="btn-icon" id="helpCloseBtn" style="padding:4px 10px;">&#10005; Close</button>
+				<button class="btn-icon" id="helpCloseBtn" style="padding:4px 10px;"><span data-i18n="btn_close">&#10005; Close</span></button>
 			</div>
 			<div style="max-height:70vh;overflow-y:auto;padding-right:8px;">
 
@@ -853,7 +947,8 @@
 
 
 
-		<script src="app.js"></script>
+		<script src="i18n.js?v=1788368488"></script>
+		<script src="app.js?v=1788368488"></script>
 		<script src="jszip.min.js"></script>
 </body>
 
