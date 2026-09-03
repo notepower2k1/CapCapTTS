@@ -14,7 +14,7 @@ from pydub import AudioSegment
 from piper import PiperVoice, PiperConfig
 from piper.config import PhonemeType, SynthesisConfig
 
-from config import PIPER_DIR, FFMPEG_DIR, OUTPUT_DIR, PIPER_SAMPLE_RATE, CROSS_FADE_MS, CUSTOM_DICT_DIR
+from config import PIPER_DIR, FFMPEG_DIR, OUTPUT_DIR, PIPER_SAMPLE_RATE, CROSS_FADE_MS, CUSTOM_DICT_DIR, setup_hf_env
 
 AudioSegment.converter = str(FFMPEG_DIR / "ffmpeg.exe")
 AudioSegment.ffprobe = str(FFMPEG_DIR / "ffprobe.exe")
