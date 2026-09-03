@@ -427,6 +427,7 @@ class VieneuEngine:
             return
         if progress_callback:
             progress_callback("Loading VieNeu ONNX models...", 30)
+        setup_hf_env()
         from vieneu import Vieneu
         self._model = Vieneu(backend="onnx")
         if progress_callback:

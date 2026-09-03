@@ -17,3 +17,6 @@ aiohttp>=3.9.0
 aiofiles>=23.0.0
 huggingface-hub>=0.20.0
 tqdm>=4.60.0
+vieneu>=3.4.0
+tokenizers
+safetensors

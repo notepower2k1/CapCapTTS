@@ -37,6 +37,7 @@ from omegaconf import OmegaConf
 from importlib.resources import files
 
 from config import (
+    setup_hf_env,
     PIPER_DIR, F5_MODEL_DIR, F5_VOICES_DIR, F5_VOCODER_DIR,
     FFMPEG_DIR, OUTPUT_DIR, PIPER_SAMPLE_RATE, F5_SAMPLE_RATE,
     CROSS_FADE_MS, OMNIVOICE_VOICES_DIR, OMNIVOICE_MODEL_DIR,
@@ -387,6 +388,7 @@ class VieneuEngine:
             return
         if progress_callback:
             progress_callback("Loading VieNeu ONNX models...", 30)
+        setup_hf_env()
         from vieneu import Vieneu
         self._model = Vieneu(backend="onnx")
         if progress_callback:

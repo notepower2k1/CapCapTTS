@@ -239,9 +239,23 @@ async def _download_resource(rid: str):
             loop = asyncio.get_running_loop()
             def _do_dl():
                 from huggingface_hub import snapshot_download
+                setup_hf_env()
                 cdir = str(get_resource_dir() / "huggingface" / "hub")
-                snapshot_download("pnnbao-ump/VieNeu-TTS-v3-Turbo", cache_dir=cdir)
-                snapshot_download("OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX", cache_dir=cdir)
+                snapshot_download(
+                    "pnnbao-ump/VieNeu-TTS-v3-Turbo",
+                    cache_dir=cdir,
+                    allow_patterns=[
+                        "onnx_update/*",
+                        "config.json",
+                        "tokenizer.json",
+                        "denoiser.onnx",
+                        "speaker_encoder.onnx",
+                    ]
+                )
+                snapshot_download(
+                    "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+                    cache_dir=cdir,
+                )
             await loop.run_in_executor(None, _do_dl)
             async with _dl_lock:
                 _dl_state["vieneu"] = {"status": "done", "progress": 100, "current_file": "", "error": ""}

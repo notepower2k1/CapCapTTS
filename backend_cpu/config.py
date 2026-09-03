@@ -90,5 +90,17 @@ def set_use_mirror(val: bool) -> bool:
         os.environ.pop("HF_ENDPOINT", None)
     return bool(val)
 
-if get_use_mirror():
-    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+
+def setup_hf_env():
+    hf_dir = get_resource_dir() / "huggingface"
+    hf_hub = hf_dir / "hub"
+    hf_hub.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HOME"] = str(hf_dir)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hf_hub)
+    if get_use_mirror():
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+    else:
+        os.environ.pop("HF_ENDPOINT", None)
+
+setup_hf_env()
