@@ -18,7 +18,7 @@ import sys
 
 import json
 
-from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, get_resource_dir, set_resource_dir, get_default_resource_dir, F5_VOICES_DIR, F5_RESOURCE_DIR, OMNIVOICE_MODEL_DIR, MAX_TEXT_LENGTH, FFMPEG_DIR, get_use_mirror, set_use_mirror
+from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, get_resource_dir, set_resource_dir, get_default_resource_dir, F5_VOICES_DIR, F5_RESOURCE_DIR, OMNIVOICE_MODEL_DIR, MAX_TEXT_LENGTH, FFMPEG_DIR, get_use_mirror, set_use_mirror, setup_hf_env
 
 AudioSegment.converter = str(FFMPEG_DIR / "ffmpeg.exe")
 AudioSegment.ffprobe = str(FFMPEG_DIR / "ffprobe.exe")

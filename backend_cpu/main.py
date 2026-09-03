@@ -22,7 +22,7 @@ import aiohttp
 import aiofiles
 from huggingface_hub import HfApi
 
-from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, MAX_TEXT_LENGTH, get_resource_dir, set_resource_dir, get_default_resource_dir, get_voices_dir, get_use_mirror, set_use_mirror
+from config import OUTPUT_DIR, CUSTOM_DICT_DIR, PIPER_DIR, MAX_TEXT_LENGTH, get_resource_dir, set_resource_dir, get_default_resource_dir, get_voices_dir, get_use_mirror, set_use_mirror, setup_hf_env
 from tts_quality_checker import evaluate_segment_quality
 from tts_engine import (
     PiperEngine, VieneuEngine, TaskManager,
@@ -865,6 +865,39 @@ async def _build_catalog():
     return result
 
 async def _download_resource(rid: str):
+    """Background task: download all files for a resource."""
+    if rid == "vieneu":
+        async with _dl_lock:
+            _dl_state["vieneu"] = {"status": "downloading", "progress": 10, "current_file": "Downloading VieNeu-TTS models from HuggingFace...", "error": ""}
+        try:
+            loop = asyncio.get_running_loop()
+            def _do_dl():
+                from huggingface_hub import snapshot_download
+                setup_hf_env()
+                cdir = str(get_resource_dir() / "huggingface" / "hub")
+                snapshot_download(
+                    "pnnbao-ump/VieNeu-TTS-v3-Turbo",
+                    cache_dir=cdir,
+                    allow_patterns=[
+                        "onnx_update/*",
+                        "config.json",
+                        "tokenizer.json",
+                        "denoiser.onnx",
+                        "speaker_encoder.onnx",
+                    ]
+                )
+                snapshot_download(
+                    "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+                    cache_dir=cdir,
+                )
+            await loop.run_in_executor(None, _do_dl)
+            async with _dl_lock:
+                _dl_state["vieneu"] = {"status": "done", "progress": 100, "current_file": "", "error": ""}
+        except Exception as e:
+            async with _dl_lock:
+                _dl_state["vieneu"] = {"status": "error", "progress": 0, "current_file": "", "error": str(e)}
+        return
+
     rdef = next((r for r in _RESOURCE_DEFS if r["id"] == rid), None)
     if not rdef:
         return
