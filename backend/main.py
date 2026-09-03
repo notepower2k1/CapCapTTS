@@ -1045,7 +1045,7 @@ async def _run_generation(task_id: str):
                 has_punctuation_pauses = pause_re is not None and pause_re.search(chunk_gen_text)
                 if engine_type in ("medium", "high") and not has_markers and not has_punctuation_pauses:
                     def _do_infer(t=chunk_gen_text, et=engine_type, vid=voice_id, s=spd):
-                        return _synthesize_one(piper_engine, f5_engine, omnivoice_engine,
+                        return _synthesize_one(piper_engine, f5_engine, omnivoice_engine, vieneu_engine,
                             et, t, vid, speed=s, pitch=pit, volume=vol,
                             normalize_audio=norm_audio, cfg_strength=cfg_val, steps=steps_val,
                             sway=sway_val, num_step=num_step_val, return_raw=True)
