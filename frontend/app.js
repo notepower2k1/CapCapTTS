@@ -211,7 +211,7 @@ function _updateGenIndicator() {
 function _saveFileConfig(idx) {
 	const f = FILE_QUEUE[idx];
 	if (!f) return;
-	const mode = APP_MODE === 'cpu' ? 'low' : (document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
+	const mode = APP_MODE === 'cpu' ? (CURRENT_VOICE_MODE || 'low') : (document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 	f.config = {
 		voice_mode: mode,
 		voice_id: CURRENT_VOICE_ID,
@@ -283,7 +283,7 @@ function _loadFileToEditor(idx) {
 	textInput.dispatchEvent(new Event('input'));
 	if (f.config) {
 		const c = f.config;
-		const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
+		const mode = APP_MODE === 'cpu' ? (c.voice_mode || CURRENT_VOICE_MODE || 'low') : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 		document.querySelectorAll('#voiceModeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
 		CURRENT_VOICE_MODE = mode;
 		if (c.voice_id) CURRENT_VOICE_ID = c.voice_id;
@@ -360,7 +360,7 @@ async function processSingleFile(idx) {
 	f.status = 'processing'; renderFileQueue();
 	try {
 		const c = f.config || {};
-		const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
+		const mode = APP_MODE === 'cpu' ? (c.voice_mode || CURRENT_VOICE_MODE || 'low') : (c.voice_mode || document.querySelector('#voiceModeToggle .toggle-btn.active')?.dataset.mode || 'low');
 		const vid = c.voice_id || CURRENT_VOICE_ID || 'banmai';
 		f.voice = (ALL_VOICES[mode] || []).find(v => v.id === vid)?.label || vid;
 		const res = await fetch(`${API_BASE}/tts/generate`, {
@@ -950,7 +950,7 @@ async function startGeneration() {
 
 	const text = selFile ? selFile.text : textInput.value.trim();
 	const c = selFile?.config || {};
-	const mode = APP_MODE === 'cpu' ? 'low' : (c.voice_mode || CURRENT_VOICE_MODE);
+	const mode = APP_MODE === 'cpu' ? (c.voice_mode || CURRENT_VOICE_MODE || 'low') : (c.voice_mode || CURRENT_VOICE_MODE);
 	const vid = c.voice_id || CURRENT_VOICE_ID;
 
 	if (selFile) {
